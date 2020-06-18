@@ -1,0 +1,5 @@
+# Note: See the PyPA documentation for a list of file names that are included/excluded by default:
+# https://packaging.python.org/guides/using-manifest-in/#how-files-are-included-in-an-sdist
+# Please only add entries here for files that are *not* already handled by default.
+
+recursive-include tests *.py
