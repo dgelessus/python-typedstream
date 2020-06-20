@@ -165,7 +165,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 	shared_object_table: typing.List[TypedStreamObjectBase]
 	
 	streamer_version: int
-	endianness: str
+	byte_order: str
 	system_version: int
 	
 	@classmethod
@@ -230,7 +230,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		return None
 	
 	def __repr__(self):
-		return f"<{type(self).__module__}.{type(self).__qualname__} at {id(self):#x}: streamer version {self.streamer_version}, endianness {self.endianness}, system version {self.system_version}>"
+		return f"<{type(self).__module__}.{type(self).__qualname__} at {id(self):#x}: streamer version {self.streamer_version}, byte order {self.byte_order}, system version {self.system_version}>"
 	
 	def _debug(self, message: str) -> None:
 		"""If this reader has debugging enabled (i. e. ``debug=True`` was passed to the constructor),
@@ -263,11 +263,11 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug(f"\t... literal integer in head: {head} ({head:#x})")
 			return head
 		elif head == TAG_INTEGER_2:
-			v = int.from_bytes(self._read_exact(2), self.endianness)
+			v = int.from_bytes(self._read_exact(2), self.byte_order)
 			self._debug(f"\t... literal integer in 2 bytes: {v} ({v:#x})")
 			return v
 		elif head == TAG_INTEGER_4:
-			v = int.from_bytes(self._read_exact(4), self.endianness)
+			v = int.from_bytes(self._read_exact(4), self.byte_order)
 			self._debug(f"\t... literal integer in 4 bytes: {v} ({v:#x})")
 			return v
 		else:
@@ -285,7 +285,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		return self._read_integer_tail(head)
 	
 	def _read_header(self) -> None:
-		"""Read the typedstream file header (streamer version, signature/endianness indicator, system version).
+		"""Read the typedstream file header (streamer version, signature/byte order indicator, system version).
 		
 		This is called only once,
 		as part of :meth:`__init__`.
@@ -306,10 +306,10 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		signature = self._read_exact(signature_length)
 		self._debug(f"Signature {signature}")
 		try:
-			self.endianness = _SIGNATURE_TO_ENDIANNESS_MAP[signature]
+			self.byte_order = _SIGNATURE_TO_ENDIANNESS_MAP[signature]
 		except KeyError:
 			raise InvalidTypedStreamError(f"Invalid signature string: {signature}")
-		self._debug(f"\t=> endianness {self.endianness}")
+		self._debug(f"\t=> byte order {self.byte_order}")
 		
 		self.system_version = self._read_integer()
 		self._debug(f"System version {self.system_version}")
