@@ -252,6 +252,11 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			raise InvalidTypedStreamError(f"Attempted to read {byte_count} bytes of data, but only got {len(data)} bytes")
 		return data
 	
+	def _read_head_byte(self) -> int:
+		(head,) = self._read_exact(1)
+		self._debug(f"Head byte: {head} ({head:#x})")
+		return head
+	
 	def _read_integer_tail(self, head: int) -> int:
 		"""Read the tail part of a low-level integer value,
 		according to the given head byte.
@@ -280,8 +285,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		:return: The decoded integer value.
 		"""
 		
-		(head,) = self._read_exact(1)
-		self._debug(f"Standalone integer with head 0x{head:>02x}")
+		self._debug(f"Standalone integer")
+		head = self._read_head_byte()
 		return self._read_integer_tail(head)
 	
 	def _read_header(self) -> None:
@@ -325,8 +330,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		:return: The read string data, which may be ``nil``/``None``.
 		"""
 		
-		(head,) = self._read_exact(1)
-		self._debug(f"Unshared string with head 0x{head:>02x}")
+		self._debug(f"Unshared string")
+		head = self._read_head_byte()
 		if head == TAG_NIL:
 			self._debug("\t... nil")
 			return None
@@ -351,8 +356,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		:return: The read string data, which may be ``nil``/``None``.
 		"""
 		
-		(head,) = self._read_exact(1)
-		self._debug(f"Shared string with head 0x{head:>02x}")
+		self._debug(f"Shared string")
+		head = self._read_head_byte()
 		if head == TAG_NIL:
 			self._debug("\t... nil")
 			return None
@@ -396,8 +401,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		:return: The fully decoded class object, which may be ``Nil``/``None``.
 		"""
 		
-		(head,) = self._read_exact(1)
-		self._debug(f"Class with head 0x{head:>02x}")
+		self._debug(f"Class")
+		head = self._read_head_byte()
 		if head == TAG_NIL:
 			self._debug("\t... nil")
 			return None
@@ -458,8 +463,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		:return: The (possibly not read yet) object, which may be ``Nil``/``None``.
 		"""
 		
-		(head,) = self._read_exact(1)
-		self._debug(f"Object with head 0x{head:>02x}")
+		self._debug(f"Object")
+		head = self._read_head_byte()
 		if head == TAG_NIL:
 			self._debug("\t... nil")
 			return None
