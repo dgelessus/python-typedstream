@@ -95,6 +95,27 @@ class TypedStreamObjectBase(abc.ABC):
 	"""Abstract base class for objects that can appear in :attr:`TypedStreamReader.shared_object_table`."""
 
 
+class CString(TypedStreamObjectBase):
+	"""Information about a C string as it is stored in a typedstream.
+	
+	This is a thin wrapper around a plain :class:`bytes` object.
+	The wrapper class is used to distinguish typed C string values from untyped bytes.
+	"""
+	
+	contents: bytes
+	
+	def __init__(self, contents: bytes) -> None:
+		super().__init__()
+		
+		self.contents = contents
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}({self.contents!r})"
+	
+	def __str__(self) -> str:
+		return str(self.contents)
+
+
 class Class(TypedStreamObjectBase):
 	"""Information about a class as it is stored at the start of objects in a typedstream."""
 	
@@ -380,6 +401,47 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			string = self.shared_string_table[decoded]
 			self._debug(f"\t~ {string}")
 			return string
+	
+	def _read_c_string(self, head: typing.Optional[int] = None) -> typing.Optional[CString]:
+		"""Read a C string value.
+		
+		A C string value may either be stored literally
+		or as a reference to a previous literally stored C string value.
+		Literal C string values are appended to the :attr:`shared_object_table` as they are being read,
+		so that they can be referenced by later non-literal C string values.
+		This happens transparently to the caller -
+		in both cases the actual C string value is returned.
+		
+		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
+		:return: The read C string value, which may be ``nil``/``None``.
+		"""
+		
+		self._debug("C string")
+		head = self._read_head_byte(head)
+		if head == TAG_NIL:
+			self._debug("\t... nil")
+			return None
+		elif head == TAG_NEW:
+			self._debug("\t... new")
+			string = self._read_shared_string()
+			assert string is not None
+			# The typedstream format does not prevent C strings from containing zero bytes,
+			# though the NeXTSTEP/Apple writer never produces such strings,
+			# and the reader does not handle them properly.
+			assert 0 not in string
+			cstring = CString(string)
+			self.shared_object_table.append(cstring)
+			return cstring
+		else:
+			self._debug("\t... reference")
+			reference_number = self._read_integer(head)
+			decoded = _decode_reference_number(reference_number)
+			self._debug(f"\t... number {decoded}")
+			cstring = self.shared_object_table[decoded]
+			if not isinstance(cstring, CString):
+				raise InvalidTypedStreamError(f"Expected reference to a CString, not {type(cstring)}")
+			self._debug(f"\t~ {cstring}")
+			return cstring
 	
 	def _read_class(self, head: typing.Optional[int] = None) -> typing.Optional[Class]:
 		"""Read a class object.
