@@ -23,27 +23,9 @@ SIGNATURE_LITTLE_ENDIAN = b"streamtyped"
 assert len(SIGNATURE_BIG_ENDIAN) == len(SIGNATURE_LITTLE_ENDIAN)
 SIGNATURE_LENGTH = len(SIGNATURE_BIG_ENDIAN)
 
-class Endianness(enum.Enum):
-	"""Describes the endianness of a typedstream.
-	
-	The underlying values for the enum are the corresponding typedstream signature strings.
-	"""
-	
-	BIG = SIGNATURE_BIG_ENDIAN
-	LITTLE = SIGNATURE_LITTLE_ENDIAN
-	
-	@property
-	def word(self) -> str:
-		"""The endianness represented as the string `"big"` or `"little"`
-		(the format expected by the :meth:`int.from_bytes` and :meth:`int.to_bytes` methods).
-		"""
-		
-		return _ENDIANNESS_WORD_MAP[self]
-
-# Only for internal use by Endianness.word.
-_ENDIANNESS_WORD_MAP = {
-	Endianness.BIG: "big",
-	Endianness.LITTLE: "little",
+_SIGNATURE_TO_ENDIANNESS_MAP = {
+	SIGNATURE_BIG_ENDIAN: "big",
+	SIGNATURE_LITTLE_ENDIAN: "little",
 }
 
 # These values are taken from the NXSYSTEMVERSION constants
@@ -183,7 +165,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 	shared_object_table: typing.List[TypedStreamObjectBase]
 	
 	streamer_version: int
-	endianness: Endianness
+	endianness: str
 	system_version: int
 	
 	@classmethod
@@ -281,11 +263,11 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug(f"\t... literal integer in head: {head} ({head:#x})")
 			return head
 		elif head == TAG_INTEGER_2:
-			v = int.from_bytes(self._read_exact(2), self.endianness.word)
+			v = int.from_bytes(self._read_exact(2), self.endianness)
 			self._debug(f"\t... literal integer in 2 bytes: {v} ({v:#x})")
 			return v
 		elif head == TAG_INTEGER_4:
-			v = int.from_bytes(self._read_exact(4), self.endianness.word)
+			v = int.from_bytes(self._read_exact(4), self.endianness)
 			self._debug(f"\t... literal integer in 4 bytes: {v} ({v:#x})")
 			return v
 		else:
@@ -324,8 +306,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		signature = self._read_exact(signature_length)
 		self._debug(f"Signature {signature}")
 		try:
-			self.endianness = Endianness(signature)
-		except ValueError:
+			self.endianness = _SIGNATURE_TO_ENDIANNESS_MAP[signature]
+		except KeyError:
 			raise InvalidTypedStreamError(f"Invalid signature string: {signature}")
 		self._debug(f"\t=> endianness {self.endianness}")
 		
