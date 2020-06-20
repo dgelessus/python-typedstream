@@ -251,18 +251,34 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			raise InvalidTypedStreamError(f"Attempted to read {byte_count} bytes of data, but only got {len(data)} bytes")
 		return data
 	
-	def _read_head_byte(self) -> int:
-		(head,) = self._read_exact(1)
-		self._debug(f"Head byte: {head} ({head:#x})")
+	def _read_head_byte(self, head: typing.Optional[int] = None) -> int:
+		"""Read a head byte.
+		
+		:param head: If ``None``, the head byte is read normally from the stream.
+			Otherwise, the passed-in head byte is returned and no read is performed.
+			This parameter is provided to simplify a common pattern in this class's internal methods,
+			where methods that need to read a head byte
+			can alternatively accept an already read head byte as a parameter
+			and skip the read operation.
+			This mechanism is used to allow a limited form of lookahead for the head byte,
+			which is needed to parse string and object references and to detect end-of-object markers.
+		:return: The read or passed in head byte.
+		"""
+		
+		if head is None:
+			(head,) = self._read_exact(1)
+			self._debug(f"Head byte: {head} ({head:#x})")
 		return head
 	
-	def _read_integer_tail(self, head: int) -> int:
-		"""Read the tail part of a low-level integer value,
-		according to the given head byte.
+	def _read_integer(self, head: typing.Optional[int] = None) -> int:
+		"""Read a low-level integer value.
 		
+		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
 		:return: The decoded integer value.
 		"""
 		
+		self._debug(f"Standalone integer")
+		head = self._read_head_byte(head)
 		if head not in TAG_RANGE:
 			self._debug(f"\t... literal integer in head: {head} ({head:#x})")
 			return head
@@ -276,17 +292,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return v
 		else:
 			raise InvalidTypedStreamError(f"Invalid head tag in this context: 0x{head:>02x}")
-	
-	def _read_integer(self) -> int:
-		"""Read a low-level integer value,
-		including its head byte.
-		
-		:return: The decoded integer value.
-		"""
-		
-		self._debug(f"Standalone integer")
-		head = self._read_head_byte()
-		return self._read_integer_tail(head)
 	
 	def _read_header(self) -> None:
 		"""Read the typedstream file header (streamer version, signature/byte order indicator, system version).
@@ -318,32 +323,31 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		self.system_version = self._read_integer()
 		self._debug(f"System version {self.system_version}")
 	
-	def _read_unshared_string(self) -> typing.Optional[bytes]:
-		"""Read a low-level string value,
-		including its head byte.
+	def _read_unshared_string(self, head: typing.Optional[int] = None) -> typing.Optional[bytes]:
+		"""Read a low-level string value.
 		
 		Strings in typedstreams have no specificed encoding,
 		so the string data is returned as raw :class:`bytes`.
 		(In practice, they usually consist of printable ASCII characters.)
 		
+		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
 		:return: The read string data, which may be ``nil``/``None``.
 		"""
 		
 		self._debug(f"Unshared string")
-		head = self._read_head_byte()
+		head = self._read_head_byte(head)
 		if head == TAG_NIL:
 			self._debug("\t... nil")
 			return None
 		else:
-			length = self._read_integer_tail(head)
+			length = self._read_integer(head)
 			self._debug(f"\t... length {length}")
 			contents = self._read_exact(length)
 			self._debug(f"\t... contents {contents}")
 			return contents
 	
-	def _read_shared_string(self) -> typing.Optional[bytes]:
-		"""Read a low-level shared string value,
-		including its head byte.
+	def _read_shared_string(self, head: typing.Optional[int] = None) -> typing.Optional[bytes]:
+		"""Read a low-level shared string value.
 		
 		A shared string value may either be stored literally (as an unshared string)
 		or as a reference to a previous literally stored shared string.
@@ -352,11 +356,12 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		This happens transparently to the caller -
 		in both cases the actual string data is returned.
 		
+		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
 		:return: The read string data, which may be ``nil``/``None``.
 		"""
 		
 		self._debug(f"Shared string")
-		head = self._read_head_byte()
+		head = self._read_head_byte(head)
 		if head == TAG_NIL:
 			self._debug("\t... nil")
 			return None
@@ -369,16 +374,15 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return string
 		else:
 			self._debug("\t... reference")
-			reference_number = self._read_integer_tail(head)
+			reference_number = self._read_integer(head)
 			decoded = _decode_reference_number(reference_number)
 			self._debug(f"\t... number {decoded}")
 			string = self.shared_string_table[decoded]
 			self._debug(f"\t~ {string}")
 			return string
 	
-	def _read_class(self) -> typing.Optional[Class]:
-		"""Read a class object,
-		including its head byte.
+	def _read_class(self, head: typing.Optional[int] = None) -> typing.Optional[Class]:
+		"""Read a class object.
 		
 		Class objects are only found at the start of an object (indicating the object's class),
 		or at the end of another class object (indicating the class's superclass).
@@ -397,11 +401,12 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		once the class object is returned,
 		it is fully initialized.
 		
+		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
 		:return: The fully decoded class object, which may be ``Nil``/``None``.
 		"""
 		
 		self._debug(f"Class")
-		head = self._read_head_byte()
+		head = self._read_head_byte(head)
 		if head == TAG_NIL:
 			self._debug("\t... nil")
 			return None
@@ -421,7 +426,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return clazz
 		else:
 			self._debug("\t... reference")
-			reference_number = self._read_integer_tail(head)
+			reference_number = self._read_integer(head)
 			decoded = _decode_reference_number(reference_number)
 			self._debug(f"\t... number {decoded}")
 			clazz = self.shared_object_table[decoded]
@@ -430,9 +435,9 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 				raise InvalidTypedStreamError(f"Expected reference to a Class, not {type(clazz)}")
 			return clazz
 	
-	def _read_object_start(self) -> typing.Optional[Object]:
+	def _read_object_start(self, head: typing.Optional[int] = None) -> typing.Optional[Object]:
 		"""Read the start of an object,
-		i. e. its head byte and class information.
+		i. e. its class information.
 		
 		An object may either be stored literally
 		or as a reference to a previous literally stored object.
@@ -459,11 +464,12 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		once the object is returned,
 		it is fully initialized.
 		
+		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
 		:return: The (possibly not read yet) object, which may be ``Nil``/``None``.
 		"""
 		
 		self._debug(f"Object")
-		head = self._read_head_byte()
+		head = self._read_head_byte(head)
 		if head == TAG_NIL:
 			self._debug("\t... nil")
 			return None
@@ -480,7 +486,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return obj
 		else:
 			self._debug("\t... reference")
-			reference_number = self._read_integer_tail(head)
+			reference_number = self._read_integer(head)
 			decoded = _decode_reference_number(reference_number)
 			self._debug(f"\t... number {decoded}")
 			obj = self.shared_object_table[decoded]
