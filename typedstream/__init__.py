@@ -708,7 +708,13 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		
 		self._debug(f"Value with type encoding {type_encoding}")
 		
-		if type_encoding in b"CcSsIiLl":
+		if type_encoding in b"Cc":
+			# Unlike other integer types,
+			# chars are always stored literally -
+			# the usual tags do not apply.
+			(char,) = self._read_exact(1)
+			return char
+		elif type_encoding in b"SsIiLl":
 			return self._read_integer(head)
 		elif type_encoding == b"f":
 			return self._read_float(head)
