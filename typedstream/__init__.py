@@ -765,7 +765,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 				self.unfinished_object_stack.append(obj)
 				next_head = self._read_head_byte()
 				while next_head != TAG_END_OF_OBJECT:
-					obj.contents.append(list(self.read_values(next_head)))
+					obj.contents.append(self.read_values(next_head))
 					next_head = self._read_head_byte()
 				popped = self.unfinished_object_stack.pop()
 				assert popped == obj
@@ -810,7 +810,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		else:
 			raise InvalidTypedStreamError(f"Don't know how to read a value with type encoding {type_encoding}")
 	
-	def read_values(self, head: typing.Optional[int] = None) -> typing.Iterable[TypedValue[typing.Any]]:
+	def read_values(self, head: typing.Optional[int] = None) -> typing.List[TypedValue[typing.Any]]:
 		"""Read the next group of typed values,
 		each of which may have any type (primitive or object).
 		
@@ -825,5 +825,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		encodings = self._read_shared_string(head)
 		if encodings is None:
 			raise InvalidTypedStreamError("Encountered nil type encoding string")
-		for encoding in _split_encodings(encodings):
-			yield TypedValue(encoding, self._read_value_with_encoding(encoding))
+		return [
+			TypedValue(encoding, self._read_value_with_encoding(encoding))
+			for encoding in _split_encodings(encodings)
+		]
