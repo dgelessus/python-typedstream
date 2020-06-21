@@ -396,24 +396,29 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug(f"Head byte: {head} ({head & 0xff:#x})")
 		return head
 	
-	def _read_integer(self, head: typing.Optional[int] = None) -> int:
+	def _read_integer(self, head: typing.Optional[int] = None, *, signed: bool) -> int:
 		"""Read a low-level integer value.
 		
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
+		:param signed: Whether to treat the integer as signed or unsigned.
 		:return: The decoded integer value.
 		"""
 		
 		self._debug(f"Standalone integer")
 		head = self._read_head_byte(head)
 		if head not in TAG_RANGE:
-			self._debug(f"\t... literal integer in head: {head} ({head & 0xff:#x})")
-			return head
+			if signed:
+				v = head
+			else:
+				v = head & 0xff
+			self._debug(f"\t... literal integer in head: {v}")
+			return v
 		elif head == TAG_INTEGER_2:
-			v = int.from_bytes(self._read_exact(2), self.byte_order)
+			v = int.from_bytes(self._read_exact(2), self.byte_order, signed=signed)
 			self._debug(f"\t... literal integer in 2 bytes: {v} ({v:#x})")
 			return v
 		elif head == TAG_INTEGER_4:
-			v = int.from_bytes(self._read_exact(4), self.byte_order)
+			v = int.from_bytes(self._read_exact(4), self.byte_order, signed=signed)
 			self._debug(f"\t... literal integer in 4 bytes: {v} ({v:#x})")
 			return v
 		else:
@@ -446,7 +451,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			raise InvalidTypedStreamError(f"Invalid signature string: {signature}")
 		self._debug(f"\t=> byte order {self.byte_order}")
 		
-		self.system_version = self._read_integer()
+		self.system_version = self._read_integer(signed=False)
 		self._debug(f"System version {self.system_version}")
 	
 	def _read_float(self, head: typing.Optional[int] = None) -> float:
@@ -463,7 +468,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			(v,) = struc.unpack(self._read_exact(struc.size))
 			return v
 		else:
-			return float(self._read_integer(head))
+			return float(self._read_integer(head, signed=True))
 	
 	def _read_double(self, head: typing.Optional[int] = None) -> float:
 		"""Read a low-level double-precision float value.
@@ -479,7 +484,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			(v,) = struc.unpack(self._read_exact(struc.size))
 			return v
 		else:
-			return float(self._read_integer(head))
+			return float(self._read_integer(head, signed=True))
 	
 	def _read_unshared_string(self, head: typing.Optional[int] = None) -> typing.Optional[bytes]:
 		"""Read a low-level string value.
@@ -498,7 +503,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug("\t... nil")
 			return None
 		else:
-			length = self._read_integer(head)
+			length = self._read_integer(head, signed=False)
 			self._debug(f"\t... length {length}")
 			contents = self._read_exact(length)
 			self._debug(f"\t... contents {contents}")
@@ -532,7 +537,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return string
 		else:
 			self._debug("\t... reference")
-			reference_number = self._read_integer(head)
+			reference_number = self._read_integer(head, signed=True)
 			decoded = _decode_reference_number(reference_number)
 			self._debug(f"\t... number {decoded}")
 			string = self.shared_string_table[decoded]
@@ -571,7 +576,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return cstring
 		else:
 			self._debug("\t... reference")
-			reference_number = self._read_integer(head)
+			reference_number = self._read_integer(head, signed=True)
 			decoded = _decode_reference_number(reference_number)
 			self._debug(f"\t... number {decoded}")
 			cstring = self.shared_object_table[decoded]
@@ -613,7 +618,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug("\t... new")
 			name = self._read_shared_string()
 			self._debug(f"\t... name {name}")
-			version = self._read_integer()
+			version = self._read_integer(signed=True)
 			self._debug(f"\t... version {version}")
 			clazz = Class(name, version, CLASS_NOT_SET_YET)
 			self._debug(f"\t... {len(self.shared_object_table)} ~ {clazz}")
@@ -625,7 +630,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return clazz
 		else:
 			self._debug("\t... reference")
-			reference_number = self._read_integer(head)
+			reference_number = self._read_integer(head, signed=True)
 			decoded = _decode_reference_number(reference_number)
 			self._debug(f"\t... number {decoded}")
 			clazz = self.shared_object_table[decoded]
@@ -686,7 +691,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return obj, True
 		else:
 			self._debug("\t... reference")
-			reference_number = self._read_integer(head)
+			reference_number = self._read_integer(head, signed=True)
 			decoded = _decode_reference_number(reference_number)
 			self._debug(f"\t... number {decoded}")
 			obj = self.shared_object_table[decoded]
@@ -708,14 +713,17 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		
 		self._debug(f"Value with type encoding {type_encoding}")
 		
-		if type_encoding in b"Cc":
-			# Unlike other integer types,
-			# chars are always stored literally -
-			# the usual tags do not apply.
-			(char,) = self._read_exact(1)
-			return char
-		elif type_encoding in b"SsIiLlQq":
-			return self._read_integer(head)
+		# Unlike other integer types,
+		# chars are always stored literally -
+		# the usual tags do not apply.
+		if type_encoding == b"C":
+			return int.from_bytes(self._read_exact(1), self.byte_order, signed=False)
+		elif type_encoding == b"c":
+			return int.from_bytes(self._read_exact(1), self.byte_order, signed=True)
+		elif type_encoding in b"SILQ":
+			return self._read_integer(head, signed=False)
+		elif type_encoding in b"silq":
+			return self._read_integer(head, signed=True)
 		elif type_encoding == b"f":
 			return self._read_float(head)
 		elif type_encoding == b"d":
