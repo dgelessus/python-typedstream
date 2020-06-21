@@ -91,6 +91,88 @@ class InvalidTypedStreamError(Exception):
 		super().__init__(*args, **kwargs)
 
 
+# Adapted from https://github.com/beeware/rubicon-objc/blob/v0.3.1/rubicon/objc/types.py#L127-L188
+# The type encoding syntax used in typedstreams is very similar,
+# but not identical,
+# to the one used by the Objective-C runtime.
+# Some features are not used/supported in typedstreams,
+# such as qualifiers, arbitrary pointers, object pointer class names, block pointers, etc.
+# Typedstreams also use some type encoding characters that are not used by the Objective-C runtime,
+# such as "+" for raw bytes and "%" for "atoms" (deduplicated/uniqued/interned C strings).
+def _end_of_encoding(encoding: bytes, start: int) -> int:
+	"""Find the end index of the encoding starting at index start.
+	
+	The encoding is not validated very extensively.
+	There are no guarantees what happens for invalid encodings;
+	an error may be raised,
+	or a bogus end index may be returned.
+	Callers are expected to check that the returned end index actually results in a valid encoding.
+	"""
+	
+	if start not in range(len(encoding)):
+		raise ValueError(f"Start index {start} not in range({len(encoding)})")
+	
+	paren_depth = 0
+	
+	i = start
+	while i < len(encoding):
+		c = encoding[i:i+1]
+		if c in b"([{":
+			# Opening parenthesis of some type, wait for a corresponding closing paren.
+			# This doesn't check that the parenthesis *types* match
+			# (only the *number* of closing parens has to match).
+			paren_depth += 1
+			i += 1
+		elif paren_depth > 0:
+			if c in b")]}":
+				# Closing parentheses of some type.
+				paren_depth -= 1
+			i += 1
+			if paren_depth == 0:
+				# Final closing parenthesis, end of this encoding.
+				return i
+		else:
+			# All other encodings consist of exactly one character.
+			return i + 1
+	
+	if paren_depth > 0:
+		raise ValueError('Incomplete encoding, missing {} closing parentheses: {}'.format(paren_depth, encoding))
+	else:
+		raise ValueError('Incomplete encoding, reached end of string too early: {}'.format(encoding))
+
+
+# Adapted from https://github.com/beeware/rubicon-objc/blob/v0.3.1/rubicon/objc/types.py#L430-L450
+def _split_encodings(encodings: bytes) -> typing.Iterable[bytes]:
+	"""Split apart multiple type encodings contained in a single encoding string."""
+	
+	start = 0
+	while start < len(encodings):
+		end = _end_of_encoding(encodings, start)
+		yield encodings[start:end]
+		start = end
+
+
+_T = typing.TypeVar("_T")
+class TypedValue(typing.Generic[_T]):
+	"""Wrapper for an arbitrary value with an attached type encoding."""
+	
+	encoding: bytes
+	value: _T
+	
+	def __init__(self, encoding: bytes, value: _T) -> None:
+		super().__init__()
+		
+		self.encoding = encoding
+		self.value = value
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}(type_encoding={self.encoding!r}, value={self.value!r})"
+	
+	def __str__(self) -> str:
+		return f"type {self.encoding}: {self.value}"
+
+
+
 class TypedStreamObjectBase(abc.ABC):
 	"""Abstract base class for objects that can appear in :attr:`TypedStreamReader.shared_object_table`."""
 
@@ -154,23 +236,38 @@ class Object(TypedStreamObjectBase):
 	"""
 	
 	clazz: Class
+	contents: typing.List[typing.List[TypedValue[typing.Any]]]
 	
 	finished: bool
 	
-	def __init__(self, clazz: Class, finished: bool) -> None:
+	def __init__(self, clazz: Class, contents: typing.List[typing.List[TypedValue[typing.Any]]], finished: bool) -> None:
 		super().__init__()
 		
 		self.clazz = clazz
+		self.contents = contents
 		self.finished = finished
 	
 	def __repr__(self):
-		return f"{type(self).__module__}.{type(self).__qualname__}(clazz={self.clazz!r}, finished={self.finished!r})"
+		return f"{type(self).__module__}.{type(self).__qualname__}(clazz={self.clazz!r}, contents={self.contents!r}, finished={self.finished!r})"
 	
 	def __str__(self):
 		rep = f"object "
 		if not self.finished:
 			rep += "(unfinished) "
-		rep += f"of class {self.clazz}"
+		rep += f"of class {self.clazz}, "
+		if not self.contents:
+			rep += "no contents"
+		else:
+			rep += "contents:\n"
+			for group in self.contents:
+				if len(group) == 1:
+					for line in str(group[0]).splitlines():
+						rep += "\t" + line + "\n"
+				else:
+					rep += "\tgroup:\n"
+					for value in group:
+						for line in str(value).splitlines():
+							rep += "\t\t" + line + "\n"
 		return rep
 
 
@@ -183,6 +280,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 	
 	shared_string_table: typing.List[bytes]
 	shared_object_table: typing.List[TypedStreamObjectBase]
+	unfinished_object_stack: typing.List[Object]
 	
 	streamer_version: int
 	byte_order: str
@@ -221,6 +319,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		
 		self.shared_string_table = []
 		self.shared_object_table = []
+		self.unfinished_object_stack = []
 		
 		try:
 			self._read_header()
@@ -537,7 +636,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return None
 		elif head == TAG_NEW:
 			self._debug("\t... new")
-			obj = Object(CLASS_NOT_SET_YET, finished=False)
+			obj = Object(CLASS_NOT_SET_YET, [], finished=False)
 			self._debug(f"\t... {len(self.shared_object_table)} ~ {obj}")
 			self.shared_object_table.append(obj)
 			clazz = self._read_class()
@@ -556,3 +655,56 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			if not isinstance(obj, Object):
 				raise InvalidTypedStreamError(f"Expected reference to an Object, not {type(obj)}")
 			return obj
+	
+	def _read_value_with_encoding(self, type_encoding: bytes, head: typing.Optional[int] = None) -> typing.Any:
+		"""Read a single value with the type indicated by the given type encoding.
+		
+		The type encoding string must contain exactly one type
+		(although it may be a compound type like a struct or array).
+		Type encoding strings that might contain more than one value must first be split using :func:`_split_encodings`.
+		
+		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
+		:return: The read value, converted to a Python representation.
+		"""
+		
+		self._debug(f"Value with type encoding {type_encoding}")
+		
+		if type_encoding in b"CcSsIiLl":
+			return self._read_integer(head)
+		elif type_encoding == b"*":
+			return self._read_c_string(head)
+		elif type_encoding == b"+":
+			return self._read_unshared_string(head)
+		elif type_encoding == b"#":
+			return self._read_class(head)
+		elif type_encoding == b"@":
+			obj = self._read_object_start(head)
+			self.unfinished_object_stack.append(obj)
+			next_head = self._read_head_byte()
+			while next_head != TAG_END_OF_OBJECT:
+				obj.contents.append(list(self.read_values(next_head)))
+				next_head = self._read_head_byte()
+			popped = self.unfinished_object_stack.pop()
+			assert popped == obj
+			obj.finished = True
+			return obj
+		else:
+			raise InvalidTypedStreamError(f"Don't know how to read a value with type encoding {type_encoding}")
+	
+	def read_values(self, head: typing.Optional[int] = None) -> typing.Iterable[TypedValue[typing.Any]]:
+		"""Read the next group of typed values,
+		each of which may have any type (primitive or object).
+		
+		The type encoding string is decoded to determine the types of the following values,
+		which are then read and converted to Python representations.
+		
+		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
+		:return: The read values and their type encodings.
+		"""
+		
+		self._debug("Type encoding-prefixed value")
+		encodings = self._read_shared_string(head)
+		if encodings is None:
+			raise InvalidTypedStreamError("Encountered nil type encoding string")
+		for encoding in _split_encodings(encodings):
+			yield TypedValue(encoding, self._read_value_with_encoding(encoding))
