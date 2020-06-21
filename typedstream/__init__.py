@@ -1,10 +1,21 @@
 import abc
 import os
+import struct
 import types
 import typing
 
 
 __version__ = "0.0.1.dev"
+
+_FLOAT_STRUCTS_BY_BYTE_ORDER = {
+	"big": struct.Struct(">f"),
+	"little": struct.Struct("<f"),
+}
+
+_DOUBLE_STRUCTS_BY_BYTE_ORDER = {
+	"big": struct.Struct(">d"),
+	"little": struct.Struct("<d"),
+}
 
 # This is the earliest streamer version still supported by Mac OS X.
 # It is only produced by earlier versions of NeXTSTEP (unclear which).
@@ -443,6 +454,38 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		self.system_version = self._read_integer()
 		self._debug(f"System version {self.system_version}")
 	
+	def _read_float(self, head: typing.Optional[int] = None) -> float:
+		"""Read a low-level single-precision float value.
+		
+		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
+		:return: The decoded float value.
+		"""
+		
+		self._debug(f"Single-precision float number")
+		head = self._read_head_byte(head)
+		if head == TAG_FLOATING_POINT:
+			struc = _FLOAT_STRUCTS_BY_BYTE_ORDER[self.byte_order]
+			(v,) = struc.unpack(self._read_exact(struc.size))
+			return v
+		else:
+			return float(self._read_integer(head))
+	
+	def _read_double(self, head: typing.Optional[int] = None) -> float:
+		"""Read a low-level double-precision float value.
+		
+		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
+		:return: The decoded double value.
+		"""
+		
+		self._debug(f"Double-precision float number")
+		head = self._read_head_byte(head)
+		if head == TAG_FLOATING_POINT:
+			struc = _DOUBLE_STRUCTS_BY_BYTE_ORDER[self.byte_order]
+			(v,) = struc.unpack(self._read_exact(struc.size))
+			return v
+		else:
+			return float(self._read_integer(head))
+	
 	def _read_unshared_string(self, head: typing.Optional[int] = None) -> typing.Optional[bytes]:
 		"""Read a low-level string value.
 		
@@ -671,6 +714,10 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		
 		if type_encoding in b"CcSsIiLl":
 			return self._read_integer(head)
+		elif type_encoding == b"f":
+			return self._read_float(head)
+		elif type_encoding == b"d":
+			return self._read_double(head)
 		elif type_encoding == b"*":
 			return self._read_c_string(head)
 		elif type_encoding == b"+":
