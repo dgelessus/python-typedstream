@@ -714,7 +714,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			# the usual tags do not apply.
 			(char,) = self._read_exact(1)
 			return char
-		elif type_encoding in b"SsIiLl":
+		elif type_encoding in b"SsIiLlQq":
 			return self._read_integer(head)
 		elif type_encoding == b"f":
 			return self._read_float(head)
