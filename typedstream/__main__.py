@@ -3,7 +3,7 @@ import sys
 import typing
 
 
-from . import TypedStreamReader, __version__
+from . import __version__, api
 
 
 def make_subcommand_parser(subs: typing.Any, name: str, *, help: str, description: str, **kwargs: typing.Any) -> argparse.ArgumentParser:
@@ -73,7 +73,7 @@ Read and display the contents of a typedstream file.
 		print("Missing subcommand", file=sys.stderr)
 		sys.exit(2)
 	elif ns.subcommand == "read":
-		with ns.file, TypedStreamReader(ns.file) as ts:
+		with ns.file, api.TypedStreamReader(ns.file) as ts:
 			while True:
 				try:
 					values = ts.read_values(end_of_stream_ok=True)
