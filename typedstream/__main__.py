@@ -74,6 +74,8 @@ Read and display the contents of a typedstream file.
 		sys.exit(2)
 	elif ns.subcommand == "read":
 		with ns.file, api.TypedStreamReader(ns.file) as ts:
+			print(f"streamer version {ts.streamer_version}, byte order {ts.byte_order}, system version {ts.system_version}")
+			print()
 			while True:
 				try:
 					values = ts.read_values(end_of_stream_ok=True)

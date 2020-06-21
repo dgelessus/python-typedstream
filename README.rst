@@ -98,6 +98,8 @@ Command-line interface
 .. code-block:: sh
 
     $ pytypedstream read /Applications/Stickies.app/Contents/Resources/English.lproj/StickiesDefaultDatabase
+    streamer version 4, byte order little, system version 1000
+    
     type b'@': object of class NSMutableArray v0, extends NSArray v0, extends NSObject v0, contents:
         type b'i': 2
         type b'@': object of class Document v1, extends NSObject v0, contents:
