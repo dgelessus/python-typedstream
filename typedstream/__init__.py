@@ -64,24 +64,24 @@ SYSTEM_VERSION_MAC_OS_X = 1000
 # * A "head" is a single-byte value that stores either a single-byte reference number or a tag (indicating a literal string/object or a multi-byte reference number).
 
 # Indicates an integer value, stored in 2 bytes.
-TAG_INTEGER_2 = 0x81
+TAG_INTEGER_2 = -127
 # Indicates an integer value, stored in 4 bytes.
-TAG_INTEGER_4 = 0x82
+TAG_INTEGER_4 = -126
 # Indicates a floating-point value, stored in 4 or 8 bytes (depending on whether it is a float or a double).
-TAG_FLOATING_POINT = 0x83
+TAG_FLOATING_POINT = -125
 # Indicates the start of a string value or an object that is stored literally and not as a backreference.
-TAG_NEW = 0x84
+TAG_NEW = -124
 # Indicates a nil value. Used for strings (unshared and shared), classes, and objects.
-TAG_NIL = 0x85
+TAG_NIL = -123
 # Indicates the end of an object.
-TAG_END_OF_OBJECT = 0x86
+TAG_END_OF_OBJECT = -122
 
 # The lowest and highest values reserved for use as tags.
 # Values outside this range are used to literally encode single-byte integers.
 # Integer values that fall into the tag range must be encoded in two separate bytes using TAG_INTEGER_2
 # so that they do not conflict with the tags.
-FIRST_TAG = 0x80
-LAST_TAG = 0x91
+FIRST_TAG = -128
+LAST_TAG = -111
 TAG_RANGE = range(FIRST_TAG, LAST_TAG + 1)
 # The first reference number to be used.
 # This has been chosen to be exactly one higher than the highest tag,
@@ -392,8 +392,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		"""
 		
 		if head is None:
-			(head,) = self._read_exact(1)
-			self._debug(f"Head byte: {head} ({head:#x})")
+			head = int.from_bytes(self._read_exact(1), self.byte_order, signed=True)
+			self._debug(f"Head byte: {head} ({head & 0xff:#x})")
 		return head
 	
 	def _read_integer(self, head: typing.Optional[int] = None) -> int:
@@ -406,7 +406,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		self._debug(f"Standalone integer")
 		head = self._read_head_byte(head)
 		if head not in TAG_RANGE:
-			self._debug(f"\t... literal integer in head: {head} ({head:#x})")
+			self._debug(f"\t... literal integer in head: {head} ({head & 0xff:#x})")
 			return head
 		elif head == TAG_INTEGER_2:
 			v = int.from_bytes(self._read_exact(2), self.byte_order)
@@ -417,7 +417,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug(f"\t... literal integer in 4 bytes: {v} ({v:#x})")
 			return v
 		else:
-			raise InvalidTypedStreamError(f"Invalid head tag in this context: 0x{head:>02x}")
+			raise InvalidTypedStreamError(f"Invalid head tag in this context: {head} ({head & 0xff:#x}")
 	
 	def _read_header(self) -> None:
 		"""Read the typedstream file header (streamer version, signature/byte order indicator, system version).
