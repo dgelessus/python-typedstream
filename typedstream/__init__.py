@@ -810,7 +810,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		else:
 			raise InvalidTypedStreamError(f"Don't know how to read a value with type encoding {type_encoding}")
 	
-	def read_values(self, head: typing.Optional[int] = None) -> typing.List[TypedValue[typing.Any]]:
+	def read_values(self, head: typing.Optional[int] = None, *, end_of_stream_ok: bool = False) -> typing.List[TypedValue[typing.Any]]:
 		"""Read the next group of typed values,
 		each of which may have any type (primitive or object).
 		
@@ -818,10 +818,27 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		which are then read and converted to Python representations.
 		
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
+		:param end_of_stream_ok: Whether reaching the end of the data stream is an acceptable condition.
+			If this method is called when the end of the stream is reached,
+			an :class:`EOFError` is raised if this parameter is true,
+			and an :class:`InvalidTypedStreamError` is raised if it is false.
+			If the end of the stream is reached in the middle of reading a value
+			(not right at the beginning),
+			the exception is always an :class:`InvalidTypedStreamError`,
+			regardless of the value of this parameter.
 		:return: The read values and their type encodings.
 		"""
 		
 		self._debug("Type encoding-prefixed value")
+		
+		try:
+			head = self._read_head_byte(head)
+		except InvalidTypedStreamError:
+			if end_of_stream_ok:
+				raise EOFError("End of typedstream reached")
+			else:
+				raise
+		
 		encodings = self._read_shared_string(head)
 		if encodings is None:
 			raise InvalidTypedStreamError("Encountered nil type encoding string")
