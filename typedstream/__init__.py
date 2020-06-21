@@ -249,22 +249,17 @@ class Object(TypedStreamObjectBase):
 	clazz: Class
 	contents: typing.List[typing.List[TypedValue[typing.Any]]]
 	
-	finished: bool
-	
-	def __init__(self, clazz: Class, contents: typing.List[typing.List[TypedValue[typing.Any]]], finished: bool) -> None:
+	def __init__(self, clazz: Class, contents: typing.List[typing.List[TypedValue[typing.Any]]]) -> None:
 		super().__init__()
 		
 		self.clazz = clazz
 		self.contents = contents
-		self.finished = finished
 	
 	def __repr__(self):
-		return f"{type(self).__module__}.{type(self).__qualname__}(clazz={self.clazz!r}, contents={self.contents!r}, finished={self.finished!r})"
+		return f"{type(self).__module__}.{type(self).__qualname__}(clazz={self.clazz!r}, contents={self.contents!r})"
 	
 	def __str__(self):
 		rep = f"object "
-		if not self.finished:
-			rep += "(unfinished) "
 		rep += f"of class {self.clazz}, "
 		if not self.contents:
 			rep += "no contents"
@@ -639,7 +634,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 				raise InvalidTypedStreamError(f"Expected reference to a Class, not {type(clazz)}")
 			return clazz
 	
-	def _read_object_start(self, head: typing.Optional[int] = None) -> typing.Optional[Object]:
+	def _read_object_start(self, head: typing.Optional[int] = None) -> typing.Tuple[typing.Optional[Object], bool]:
 		"""Read the start of an object,
 		i. e. its class information.
 		
@@ -650,16 +645,16 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		In both cases an object value is returned,
 		although the two cases need to be handled differently by the caller.
 		
-		If the object's :attr:`~Object.finished` attribute is false,
+		If the second return value is true,
 		the object is stored literally.
 		The caller is expected to read the object's data
 		that follows the start of the object
-		until the matching end of object tag is reached
-		and then set :attr:`~Object.finished` to ``True``.
+		and store it in the object's :attr:`~Object.contents` attribute,
+		until the matching end of object tag is reached.
 		
-		If :attr:`~Object.finished` is already true when the object is returned,
-		the object was a reference to a previous literally stored object.
-		In this case there is no following object data or end of object tag that need to be read.
+		If the second return value is false,
+		the object was ``nil`` or a reference to a previous literally stored object.
+		In this case there is no following object data or end of object tag that need to be read by the caller.
 		
 		Because of how the typedstream format expects references to be numbered,
 		objects are already added to :attr:`shared_object_table` before they are fully initialized.
@@ -669,17 +664,18 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		it is fully initialized.
 		
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
-		:return: The (possibly not read yet) object, which may be ``Nil``/``None``.
+		:return: A tuple containing the object (which may be ``nil``/``None``),
+			and a boolean indicating whether the object's contents need to be read by the caller.
 		"""
 		
 		self._debug(f"Object")
 		head = self._read_head_byte(head)
 		if head == TAG_NIL:
 			self._debug("\t... nil")
-			return None
+			return None, False
 		elif head == TAG_NEW:
 			self._debug("\t... new")
-			obj = Object(CLASS_NOT_SET_YET, [], finished=False)
+			obj = Object(CLASS_NOT_SET_YET, [])
 			self._debug(f"\t... {len(self.shared_object_table)} ~ {obj}")
 			self.shared_object_table.append(obj)
 			clazz = self._read_class()
@@ -687,7 +683,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			if clazz is None:
 				raise InvalidTypedStreamError("Object class cannot be nil")
 			obj.clazz = clazz
-			return obj
+			return obj, True
 		else:
 			self._debug("\t... reference")
 			reference_number = self._read_integer(head)
@@ -697,7 +693,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug(f"\t~ {obj}")
 			if not isinstance(obj, Object):
 				raise InvalidTypedStreamError(f"Expected reference to an Object, not {type(obj)}")
-			return obj
+			return obj, False
 	
 	def _read_value_with_encoding(self, type_encoding: bytes, head: typing.Optional[int] = None) -> typing.Any:
 		"""Read a single value with the type indicated by the given type encoding.
@@ -725,15 +721,15 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		elif type_encoding == b"#":
 			return self._read_class(head)
 		elif type_encoding == b"@":
-			obj = self._read_object_start(head)
-			self.unfinished_object_stack.append(obj)
-			next_head = self._read_head_byte()
-			while next_head != TAG_END_OF_OBJECT:
-				obj.contents.append(list(self.read_values(next_head)))
+			obj, needs_read = self._read_object_start(head)
+			if needs_read:
+				self.unfinished_object_stack.append(obj)
 				next_head = self._read_head_byte()
-			popped = self.unfinished_object_stack.pop()
-			assert popped == obj
-			obj.finished = True
+				while next_head != TAG_END_OF_OBJECT:
+					obj.contents.append(list(self.read_values(next_head)))
+					next_head = self._read_head_byte()
+				popped = self.unfinished_object_stack.pop()
+				assert popped == obj
 			return obj
 		else:
 			raise InvalidTypedStreamError(f"Don't know how to read a value with type encoding {type_encoding}")
