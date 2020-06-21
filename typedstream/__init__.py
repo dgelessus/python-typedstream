@@ -825,6 +825,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		encodings = self._read_shared_string(head)
 		if encodings is None:
 			raise InvalidTypedStreamError("Encountered nil type encoding string")
+		elif not encodings:
+			raise InvalidTypedStreamError("Encountered empty type encoding string")
 		return [
 			TypedValue(encoding, self._read_value_with_encoding(encoding))
 			for encoding in _split_encodings(encodings)
