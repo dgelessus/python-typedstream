@@ -731,6 +731,29 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 				popped = self.unfinished_object_stack.pop()
 				assert popped == obj
 			return obj
+		elif type_encoding.startswith(b"["):
+			if not type_encoding.endswith(b"]"):
+				raise InvalidTypedStreamError(f"Missing closing bracket in array type encoding {type_encoding}")
+			
+			i = 1
+			while i < len(type_encoding) - 1:
+				if type_encoding[i] not in b"0123456789":
+					break
+				i += 1
+			length_string, element_type_encoding = type_encoding[1:i], type_encoding[i:-1]
+			
+			if not length_string:
+				raise InvalidTypedStreamError(f"Missing length in array type encoding: {type_encoding}")
+			if not element_type_encoding:
+				raise InvalidTypedStreamError(f"Missing element type in array type encoding: {type_encoding}")
+			
+			length = int(length_string.decode("ascii"))
+			
+			if element_type_encoding in b"Cc":
+				# Special case for byte arrays for faster reading and a better parsed representation.
+				return self._read_exact(length)
+			else:
+				return [self._read_value_with_encoding(element_type_encoding) for _ in range(length)]
 		else:
 			raise InvalidTypedStreamError(f"Don't know how to read a value with type encoding {type_encoding}")
 	
