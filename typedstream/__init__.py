@@ -183,6 +183,31 @@ class TypedValue(typing.Generic[_T]):
 		return f"type {self.encoding}: {self.value}"
 
 
+class Struct(object):
+	"""Representation of the contents of a C struct as it is stored in a typedstream.
+	
+	This is a thin wrapper around a list,
+	to distinguish structs from arrays
+	(which are represented as plain lists).
+	"""
+	
+	fields: typing.List[TypedValue]
+	
+	def __init__(self, fields: typing.List[TypedValue]) -> None:
+		super().__init__()
+		
+		self.fields = fields
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}(fields={self.fields!r})"
+	
+	def __str__(self) -> str:
+		rep = f"struct:\n"
+		for field_value in self.fields:
+			for line in str(field_value).splitlines():
+				rep += "\t" + line + "\n"
+		return rep
+
 
 class TypedStreamObjectBase(abc.ABC):
 	"""Abstract base class for objects that can appear in :attr:`TypedStreamReader.shared_object_table`."""
@@ -768,6 +793,20 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 				return self._read_exact(length)
 			else:
 				return [self._read_value_with_encoding(element_type_encoding) for _ in range(length)]
+		elif type_encoding.startswith(b"{"):
+			if not type_encoding.endswith(b"}"):
+				raise InvalidTypedStreamError(f"Missing closing brace in struct type encoding {type_encoding}")
+			
+			try:
+				equals_pos = type_encoding.index(b"=")
+			except ValueError:
+				raise InvalidTypedStreamError(f"Missing name in struct type encoding {type_encoding}")
+			
+			field_type_encodings = type_encoding[equals_pos+1:-1]
+			return Struct([
+				TypedValue(field_type_encoding, self._read_value_with_encoding(field_type_encoding))
+				for field_type_encoding in _split_encodings(field_type_encodings)
+			])
 		else:
 			raise InvalidTypedStreamError(f"Don't know how to read a value with type encoding {type_encoding}")
 	
