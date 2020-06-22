@@ -95,9 +95,6 @@ def _decode_reference_number(encoded: int) -> int:
 
 class InvalidTypedStreamError(Exception):
 	"""Raised by :class:`TypedStreamReader` if the typedstream data is invalid or doesn't match the expected structure."""
-	
-	def __init__(self, *args, **kwargs):
-		super().__init__(*args, **kwargs)
 
 
 # Adapted from https://github.com/beeware/rubicon-objc/blob/v0.3.1/rubicon/objc/types.py#L127-L188
@@ -145,9 +142,9 @@ def _end_of_encoding(encoding: bytes, start: int) -> int:
 			return i + 1
 	
 	if paren_depth > 0:
-		raise ValueError('Incomplete encoding, missing {} closing parentheses: {}'.format(paren_depth, encoding))
+		raise ValueError(f"Incomplete encoding, missing {paren_depth} closing parentheses: {encoding!r}")
 	else:
-		raise ValueError('Incomplete encoding, reached end of string too early: {}'.format(encoding))
+		raise ValueError(f"Incomplete encoding, reached end of string too early: {encoding!r}")
 
 
 # Adapted from https://github.com/beeware/rubicon-objc/blob/v0.3.1/rubicon/objc/types.py#L430-L450
@@ -162,6 +159,8 @@ def _split_encodings(encodings: bytes) -> typing.Iterable[bytes]:
 
 
 _T = typing.TypeVar("_T")
+
+
 class TypedValue(typing.Generic[_T]):
 	"""Wrapper for an arbitrary value with an attached type encoding."""
 	
@@ -178,7 +177,7 @@ class TypedValue(typing.Generic[_T]):
 		return f"{type(self).__module__}.{type(self).__qualname__}(type_encoding={self.encoding!r}, value={self.value!r})"
 	
 	def __str__(self) -> str:
-		return f"type {self.encoding}: {self.value}"
+		return f"type {self.encoding!r}: {self.value}"
 
 
 class Struct(object):
@@ -200,7 +199,7 @@ class Struct(object):
 		return f"{type(self).__module__}.{type(self).__qualname__}(fields={self.fields!r})"
 	
 	def __str__(self) -> str:
-		rep = f"struct:\n"
+		rep = "struct:\n"
 		for field_value in self.fields:
 			for line in str(field_value).splitlines():
 				rep += "\t" + line + "\n"
@@ -246,10 +245,10 @@ class Class(TypedStreamObjectBase):
 		self.version = version
 		self.superclass = superclass
 	
-	def __repr__(self):
+	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(name={self.name!r}, version={self.version!r}, superclass={self.superclass!r})"
 	
-	def __str__(self):
+	def __str__(self) -> str:
 		rep = f"{self.name.decode('ascii', errors='backslashreplace')} v{self.version}"
 		if self.superclass is not None:
 			rep += f", extends {self.superclass}"
@@ -278,12 +277,11 @@ class Object(TypedStreamObjectBase):
 		self.clazz = clazz
 		self.contents = contents
 	
-	def __repr__(self):
+	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(clazz={self.clazz!r}, contents={self.contents!r})"
 	
-	def __str__(self):
-		rep = f"object "
-		rep += f"of class {self.clazz}, "
+	def __str__(self) -> str:
+		rep = "object of class {self.clazz}, "
 		if not self.contents:
 			rep += "no contents"
 		else:
@@ -377,7 +375,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		self.close()
 		return None
 	
-	def __repr__(self):
+	def __repr__(self) -> str:
 		return f"<{type(self).__module__}.{type(self).__qualname__} at {id(self):#x}: streamer version {self.streamer_version}, byte order {self.byte_order}, system version {self.system_version}>"
 	
 	def _debug(self, message: str) -> None:
@@ -427,7 +425,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		:return: The decoded integer value.
 		"""
 		
-		self._debug(f"Standalone integer")
+		self._debug("Standalone integer")
 		head = self._read_head_byte(head)
 		if head not in TAG_RANGE:
 			if signed:
@@ -467,11 +465,11 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			raise InvalidTypedStreamError(f"The signature string must be exactly {SIGNATURE_LENGTH} bytes long, not {signature_length}")
 		
 		signature = self._read_exact(signature_length)
-		self._debug(f"Signature {signature}")
+		self._debug(f"Signature {signature!r}")
 		try:
 			self.byte_order = _SIGNATURE_TO_ENDIANNESS_MAP[signature]
 		except KeyError:
-			raise InvalidTypedStreamError(f"Invalid signature string: {signature}")
+			raise InvalidTypedStreamError(f"Invalid signature string: {signature!r}")
 		self._debug(f"\t=> byte order {self.byte_order}")
 		
 		self.system_version = self._read_integer(signed=False)
@@ -484,7 +482,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		:return: The decoded float value.
 		"""
 		
-		self._debug(f"Single-precision float number")
+		self._debug("Single-precision float number")
 		head = self._read_head_byte(head)
 		if head == TAG_FLOATING_POINT:
 			struc = _FLOAT_STRUCTS_BY_BYTE_ORDER[self.byte_order]
@@ -500,7 +498,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		:return: The decoded double value.
 		"""
 		
-		self._debug(f"Double-precision float number")
+		self._debug("Double-precision float number")
 		head = self._read_head_byte(head)
 		if head == TAG_FLOATING_POINT:
 			struc = _DOUBLE_STRUCTS_BY_BYTE_ORDER[self.byte_order]
@@ -520,7 +518,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		:return: The read string data, which may be ``nil``/``None``.
 		"""
 		
-		self._debug(f"Unshared string")
+		self._debug("Unshared string")
 		head = self._read_head_byte(head)
 		if head == TAG_NIL:
 			self._debug("\t... nil")
@@ -529,7 +527,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			length = self._read_integer(head, signed=False)
 			self._debug(f"\t... length {length}")
 			contents = self._read_exact(length)
-			self._debug(f"\t... contents {contents}")
+			self._debug(f"\t... contents {contents!r}")
 			return contents
 	
 	def _read_shared_string(self, head: typing.Optional[int] = None) -> typing.Optional[bytes]:
@@ -546,7 +544,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		:return: The read string data, which may be ``nil``/``None``.
 		"""
 		
-		self._debug(f"Shared string")
+		self._debug("Shared string")
 		head = self._read_head_byte(head)
 		if head == TAG_NIL:
 			self._debug("\t... nil")
@@ -555,7 +553,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug("\t... new")
 			string = self._read_unshared_string()
 			assert string is not None
-			self._debug(f"\t... {len(self.shared_string_table)} ~ {string}")
+			self._debug(f"\t... {len(self.shared_string_table)} ~ {string!r}")
 			self.shared_string_table.append(string)
 			return string
 		else:
@@ -564,7 +562,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			decoded = _decode_reference_number(reference_number)
 			self._debug(f"\t... number {decoded}")
 			string = self.shared_string_table[decoded]
-			self._debug(f"\t~ {string}")
+			self._debug(f"\t~ {string!r}")
 			return string
 	
 	def _read_c_string(self, head: typing.Optional[int] = None) -> typing.Optional[CString]:
@@ -602,11 +600,11 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			reference_number = self._read_integer(head, signed=True)
 			decoded = _decode_reference_number(reference_number)
 			self._debug(f"\t... number {decoded}")
-			cstring = self.shared_object_table[decoded]
-			if not isinstance(cstring, CString):
-				raise InvalidTypedStreamError(f"Expected reference to a CString, not {type(cstring)}")
-			self._debug(f"\t~ {cstring}")
-			return cstring
+			referenced = self.shared_object_table[decoded]
+			if not isinstance(referenced, CString):
+				raise InvalidTypedStreamError(f"Expected reference to a CString, not {type(referenced)}")
+			self._debug(f"\t~ {referenced}")
+			return referenced
 	
 	def _read_class(self, head: typing.Optional[int] = None) -> typing.Optional[Class]:
 		"""Read a class object.
@@ -632,7 +630,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		:return: The fully decoded class object, which may be ``Nil``/``None``.
 		"""
 		
-		self._debug(f"Class")
+		self._debug("Class")
 		head = self._read_head_byte(head)
 		if head == TAG_NIL:
 			self._debug("\t... nil")
@@ -640,7 +638,9 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		elif head == TAG_NEW:
 			self._debug("\t... new")
 			name = self._read_shared_string()
-			self._debug(f"\t... name {name}")
+			if name is None:
+				raise InvalidTypedStreamError("Class name cannot be nil")
+			self._debug(f"\t... name {name!r}")
 			version = self._read_integer(signed=True)
 			self._debug(f"\t... version {version}")
 			clazz = Class(name, version, CLASS_NOT_SET_YET)
@@ -656,11 +656,11 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			reference_number = self._read_integer(head, signed=True)
 			decoded = _decode_reference_number(reference_number)
 			self._debug(f"\t... number {decoded}")
-			clazz = self.shared_object_table[decoded]
-			self._debug(f"\t~ {clazz}")
-			if not isinstance(clazz, Class):
-				raise InvalidTypedStreamError(f"Expected reference to a Class, not {type(clazz)}")
-			return clazz
+			referenced = self.shared_object_table[decoded]
+			self._debug(f"\t~ {referenced}")
+			if not isinstance(referenced, Class):
+				raise InvalidTypedStreamError(f"Expected reference to a Class, not {type(referenced)}")
+			return referenced
 	
 	def _read_object_start(self, head: typing.Optional[int] = None) -> typing.Tuple[typing.Optional[Object], bool]:
 		"""Read the start of an object,
@@ -696,7 +696,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			and a boolean indicating whether the object's contents need to be read by the caller.
 		"""
 		
-		self._debug(f"Object")
+		self._debug("Object")
 		head = self._read_head_byte(head)
 		if head == TAG_NIL:
 			self._debug("\t... nil")
@@ -717,11 +717,11 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			reference_number = self._read_integer(head, signed=True)
 			decoded = _decode_reference_number(reference_number)
 			self._debug(f"\t... number {decoded}")
-			obj = self.shared_object_table[decoded]
-			self._debug(f"\t~ {obj}")
-			if not isinstance(obj, Object):
-				raise InvalidTypedStreamError(f"Expected reference to an Object, not {type(obj)}")
-			return obj, False
+			referenced = self.shared_object_table[decoded]
+			self._debug(f"\t~ {referenced}")
+			if not isinstance(referenced, Object):
+				raise InvalidTypedStreamError(f"Expected reference to an Object, not {type(referenced)}")
+			return referenced, False
 	
 	def _read_value_with_encoding(self, type_encoding: bytes, head: typing.Optional[int] = None) -> typing.Any:
 		"""Read a single value with the type indicated by the given type encoding.
@@ -734,7 +734,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		:return: The read value, converted to a Python representation.
 		"""
 		
-		self._debug(f"Value with type encoding {type_encoding}")
+		self._debug(f"Value with type encoding {type_encoding!r}")
 		
 		# Unlike other integer types,
 		# chars are always stored literally -
@@ -760,6 +760,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		elif type_encoding == b"@":
 			obj, needs_read = self._read_object_start(head)
 			if needs_read:
+				assert obj is not None
 				self.unfinished_object_stack.append(obj)
 				next_head = self._read_head_byte()
 				while next_head != TAG_END_OF_OBJECT:
@@ -770,7 +771,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return obj
 		elif type_encoding.startswith(b"["):
 			if not type_encoding.endswith(b"]"):
-				raise InvalidTypedStreamError(f"Missing closing bracket in array type encoding {type_encoding}")
+				raise InvalidTypedStreamError(f"Missing closing bracket in array type encoding {type_encoding!r}")
 			
 			i = 1
 			while i < len(type_encoding) - 1:
@@ -780,9 +781,9 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			length_string, element_type_encoding = type_encoding[1:i], type_encoding[i:-1]
 			
 			if not length_string:
-				raise InvalidTypedStreamError(f"Missing length in array type encoding: {type_encoding}")
+				raise InvalidTypedStreamError(f"Missing length in array type encoding: {type_encoding!r}")
 			if not element_type_encoding:
-				raise InvalidTypedStreamError(f"Missing element type in array type encoding: {type_encoding}")
+				raise InvalidTypedStreamError(f"Missing element type in array type encoding: {type_encoding!r}")
 			
 			length = int(length_string.decode("ascii"))
 			
@@ -793,12 +794,12 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 				return [self._read_value_with_encoding(element_type_encoding) for _ in range(length)]
 		elif type_encoding.startswith(b"{"):
 			if not type_encoding.endswith(b"}"):
-				raise InvalidTypedStreamError(f"Missing closing brace in struct type encoding {type_encoding}")
+				raise InvalidTypedStreamError(f"Missing closing brace in struct type encoding {type_encoding!r}")
 			
 			try:
 				equals_pos = type_encoding.index(b"=")
 			except ValueError:
-				raise InvalidTypedStreamError(f"Missing name in struct type encoding {type_encoding}")
+				raise InvalidTypedStreamError(f"Missing name in struct type encoding {type_encoding!r}")
 			
 			field_type_encodings = type_encoding[equals_pos+1:-1]
 			return Struct([
@@ -806,7 +807,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 				for field_type_encoding in _split_encodings(field_type_encodings)
 			])
 		else:
-			raise InvalidTypedStreamError(f"Don't know how to read a value with type encoding {type_encoding}")
+			raise InvalidTypedStreamError(f"Don't know how to read a value with type encoding {type_encoding!r}")
 	
 	def read_values(self, head: typing.Optional[int] = None, *, end_of_stream_ok: bool = False) -> typing.List[TypedValue[typing.Any]]:
 		"""Read the next group of typed values,
