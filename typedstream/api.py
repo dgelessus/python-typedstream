@@ -1,4 +1,3 @@
-import abc
 import os
 import struct
 import types
@@ -206,11 +205,7 @@ class Struct(object):
 		return rep
 
 
-class TypedStreamObjectBase(abc.ABC):
-	"""Abstract base class for objects that can appear in :attr:`TypedStreamReader.shared_object_table`."""
-
-
-class CString(TypedStreamObjectBase):
+class CString(object):
 	"""Information about a C string as it is stored in a typedstream.
 	
 	This is a thin wrapper around a plain :class:`bytes` object.
@@ -231,7 +226,7 @@ class CString(TypedStreamObjectBase):
 		return str(self.contents)
 
 
-class Class(TypedStreamObjectBase):
+class Class(object):
 	"""Information about a class as it is stored at the start of objects in a typedstream."""
 	
 	name: bytes
@@ -261,7 +256,7 @@ class Class(TypedStreamObjectBase):
 CLASS_NOT_SET_YET = Class(b"<placeholder - class has not been read/set yet>", -1, None)
 
 
-class Object(TypedStreamObjectBase):
+class Object(object):
 	"""Representation of an object as it is stored in a typedstream.
 	
 	Currently this is only used as a placeholder for the object in the :attr:`TypedStreamReader.shared_object_table`
@@ -306,7 +301,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 	_stream: typing.BinaryIO
 	
 	shared_string_table: typing.List[bytes]
-	shared_object_table: typing.List[TypedStreamObjectBase]
+	shared_object_table: typing.List[typing.Union[CString, Class, Object]]
 	unfinished_object_stack: typing.List[Object]
 	
 	streamer_version: int
