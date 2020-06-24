@@ -281,7 +281,7 @@ class Object(TypedStreamObjectBase):
 		return f"{type(self).__module__}.{type(self).__qualname__}(clazz={self.clazz!r}, contents={self.contents!r})"
 	
 	def __str__(self) -> str:
-		rep = "object of class {self.clazz}, "
+		rep = f"object of class {self.clazz}, "
 		if not self.contents:
 			rep += "no contents"
 		else:
