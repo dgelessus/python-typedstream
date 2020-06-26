@@ -187,9 +187,9 @@ class Struct(object):
 	(which are represented as plain lists).
 	"""
 	
-	fields: typing.List[TypedValue]
+	fields: typing.List[TypedValue[typing.Any]]
 	
-	def __init__(self, fields: typing.List[TypedValue]) -> None:
+	def __init__(self, fields: typing.List[TypedValue[typing.Any]]) -> None:
 		super().__init__()
 		
 		self.fields = fields
