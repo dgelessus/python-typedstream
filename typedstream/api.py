@@ -706,7 +706,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug("\t... reference")
 			return self._read_object_reference(head)
 	
-	def _read_object_start(self, head: typing.Optional[int] = None) -> typing.Tuple[typing.Optional[typing.Union[Object, ObjectReference]], bool]:
+	def _read_object_start(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[Object, ObjectReference]]:
 		"""Read the start of an object,
 		i. e. its class information.
 		
@@ -716,16 +716,15 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		Objects stored as references are returned as :class:`ObjectReference` objects
 		and are not automatically dereferenced.
 		
-		If the second return value is true,
+		If the return value is an :class:`Object`,
 		the object is stored literally.
 		The caller is expected to read the object's data
 		that follows the start of the object
 		and store it in the object's :attr:`~Object.contents` attribute,
 		until the matching end of object tag is reached.
 		
-		If the second return value is false,
-		the object was ``nil`` or a reference to a previous literally stored object.
-		In this case there is no following object data or end of object tag that need to be read by the caller.
+		If the return value is ``None`` or an :class:`ObjectReference`,
+		there is no following object data or end of object tag that need to be read by the caller.
 		
 		Because of how the typedstream format expects references to be numbered,
 		objects are already added to :attr:`shared_object_table` before they are fully initialized.
@@ -735,15 +734,14 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		it is fully initialized.
 		
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
-		:return: A tuple containing the object or reference (which may be ``nil``/``None``),
-			and a boolean indicating whether the object's contents need to be read by the caller.
+		:return: The read object or reference, which may be ``nil``/``None``.
 		"""
 		
 		self._debug("Object")
 		head = self._read_head_byte(head)
 		if head == TAG_NIL:
 			self._debug("\t... nil")
-			return None, False
+			return None
 		elif head == TAG_NEW:
 			self._debug("\t... new")
 			obj = Object(CLASS_NOT_SET_YET, [])
@@ -754,10 +752,10 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			if clazz is None:
 				raise InvalidTypedStreamError("Object class cannot be nil")
 			obj.clazz = clazz
-			return obj, True
+			return obj
 		else:
 			self._debug("\t... reference")
-			return self._read_object_reference(head), False
+			return self._read_object_reference(head)
 	
 	def _read_value_with_encoding(self, type_encoding: bytes, head: typing.Optional[int] = None) -> typing.Any:
 		"""Read a single value with the type indicated by the given type encoding.
@@ -794,8 +792,10 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		elif type_encoding == b"#":
 			return self._read_class(head)
 		elif type_encoding == b"@":
-			obj, needs_read = self._read_object_start(head)
-			if needs_read:
+			obj = self._read_object_start(head)
+			if isinstance(obj, Object):
+				# Object is stored literally and is not nil or a reference,
+				# so read the contents until the end of the object is reached.
 				assert obj is not None
 				self.unfinished_object_stack.append(obj)
 				next_head = self._read_head_byte()
