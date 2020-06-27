@@ -260,6 +260,27 @@ class Struct(object):
 		return rep
 
 
+class Selector(object):
+	"""An Objective-C selector.
+	
+	This is a thin wrapper around a plain :class:`bytes` object.
+	The wrapper class is used to distinguish selector values from untyped bytes.
+	"""
+	
+	name: typing.Optional[bytes]
+	
+	def __init__(self, name: typing.Optional[bytes]) -> None:
+		super().__init__()
+		
+		self.name = name
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}({self.name!r})"
+	
+	def __str__(self) -> str:
+		return f"selector: {self.name!r}"
+
+
 class ReferenceNumberedObject(object):
 	"""Base class for objects that are assigned a reference number and stored in the shared object table."""
 	
@@ -802,6 +823,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return self._read_double(head)
 		elif type_encoding == b"*":
 			return self._read_c_string(head)
+		elif type_encoding == b":":
+			return Selector(self._read_shared_string(head))
 		elif type_encoding == b"+":
 			return self._read_unshared_string(head)
 		elif type_encoding == b"#":
