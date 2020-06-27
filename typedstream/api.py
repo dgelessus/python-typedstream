@@ -179,21 +179,26 @@ class TypedValue(typing.Generic[_T]):
 		return f"type {self.encoding!r}: {self.value}"
 
 
-class ObjectReference(object):
+_RNO = typing.TypeVar("_RNO", bound="ReferenceNumberedObject")
+
+
+class ObjectReference(typing.Generic[_RNO]):
 	"""A reference to a previously read object."""
 	
+	referenced_type: typing.Type[_RNO]
 	number: int
 	
-	def __init__(self, number: int) -> None:
+	def __init__(self, referenced_type: typing.Type[_RNO], number: int) -> None:
 		super().__init__()
 		
+		self.referenced_type = referenced_type
 		self.number = number
 	
 	def __repr__(self) -> str:
-		return f"{type(self).__module__}.{type(self).__qualname__}({self.number!r})"
+		return f"{type(self).__module__}.{type(self).__qualname__}({self.referenced_type.__qualname__}, {self.number!r})"
 	
 	def __str__(self) -> str:
-		return f"<reference to object #{self.number}>"
+		return f"<reference to {self.referenced_type.__qualname__} #{self.number}>"
 
 
 class Group(object):
@@ -321,9 +326,9 @@ class Class(ReferenceNumberedObject):
 	
 	name: bytes
 	version: int
-	superclass: typing.Optional[typing.Union["Class", ObjectReference]]
+	superclass: typing.Optional[typing.Union["Class", ObjectReference["Class"]]]
 	
-	def __init__(self, number: int, name: bytes, version: int, superclass: typing.Optional[typing.Union["Class", ObjectReference]]) -> None:
+	def __init__(self, number: int, name: bytes, version: int, superclass: typing.Optional[typing.Union["Class", ObjectReference["Class"]]]) -> None:
 		super().__init__(number)
 		
 		self.name = name
@@ -353,10 +358,10 @@ class Object(ReferenceNumberedObject):
 	to make the reference numbering work as required.
 	"""
 	
-	clazz: typing.Union[Class, ObjectReference]
+	clazz: typing.Union[Class, ObjectReference[Class]]
 	contents: typing.List[TypedValue[typing.Any]]
 	
-	def __init__(self, number: int, clazz: typing.Union[Class, ObjectReference], contents: typing.List[TypedValue[typing.Any]]) -> None:
+	def __init__(self, number: int, clazz: typing.Union[Class, ObjectReference[Class]], contents: typing.List[TypedValue[typing.Any]]) -> None:
 		super().__init__(number)
 		
 		self.clazz = clazz
@@ -645,21 +650,21 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug(f"\t~ {string!r}")
 			return string
 	
-	def _read_object_reference(self, head: typing.Optional[int] = None) -> ObjectReference:
+	def _read_object_reference(self, referenced_type: typing.Type[_RNO], head: typing.Optional[int] = None) -> ObjectReference[_RNO]:
 		"""
 		
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
 		:return: The read object reference.
 		"""
 		
-		self._debug("Object reference")
+		self._debug(f"Reference to {referenced_type.__qualname__}")
 		reference_number = self._read_integer(head, signed=True)
 		self._debug(f"... number {reference_number}")
 		decoded = _decode_reference_number(reference_number)
 		self._debug(f"... decoded to {decoded}")
-		return ObjectReference(decoded)
+		return ObjectReference(referenced_type, decoded)
 	
-	def _read_c_string(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[CString, ObjectReference]]:
+	def _read_c_string(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[CString, ObjectReference[CString]]]:
 		"""Read a C string value.
 		
 		A C string value may either be stored literally
@@ -693,9 +698,9 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return cstring
 		else:
 			self._debug("\t... reference")
-			return self._read_object_reference(head)
+			return self._read_object_reference(CString, head)
 	
-	def _read_class(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[Class, ObjectReference]]:
+	def _read_class(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[Class, ObjectReference[Class]]]:
 		"""Read a class object.
 		
 		Class objects are only found at the start of an object (indicating the object's class),
@@ -741,9 +746,9 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return clazz
 		else:
 			self._debug("\t... reference")
-			return self._read_object_reference(head)
+			return self._read_object_reference(Class, head)
 	
-	def _read_object_start(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[Object, ObjectReference]]:
+	def _read_object_start(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[Object, ObjectReference[Object]]]:
 		"""Read the start of an object,
 		i. e. its class information.
 		
@@ -792,7 +797,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return obj
 		else:
 			self._debug("\t... reference")
-			return self._read_object_reference(head)
+			return self._read_object_reference(Object, head)
 	
 	def _read_value_with_encoding(self, type_encoding: bytes, head: typing.Optional[int] = None) -> typing.Any:
 		"""Read a single value with the type indicated by the given type encoding.
