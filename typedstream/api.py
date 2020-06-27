@@ -328,6 +328,8 @@ class Object(object):
 class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 	"""Reads typedstream data from a raw byte stream."""
 	
+	_EOF_MESSAGE: typing.ClassVar[str] = "End of typedstream reached"
+	
 	_is_debug_on: bool
 	_close_stream: bool
 	_stream: typing.BinaryIO
@@ -864,7 +866,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			head = self._read_head_byte(head)
 		except InvalidTypedStreamError:
 			if end_of_stream_ok:
-				raise EOFError("End of typedstream reached")
+				raise EOFError(type(self)._EOF_MESSAGE)
 			else:
 				raise
 		
@@ -885,3 +887,20 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return value
 		else:
 			return TypedValue(encodings, Group(values))
+	
+	@property
+	def values(self) -> typing.Iterator[TypedValue[typing.Any]]:
+		"""Iterator over the typed values stored in the stream.
+		
+		Iterating over :attr:`values` is equivalent to repeatedly calling :func:`read_value` until the end of the stream is reached.
+		"""
+		
+		while True:
+			try:
+				yield self.read_value(end_of_stream_ok=True)
+			except EOFError as e:
+				# Make sure that the EOFError actually came from our code and not from some other IO code.
+				if tuple(e.args) == (type(self)._EOF_MESSAGE,):
+					return
+				else:
+					raise
