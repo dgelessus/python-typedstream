@@ -631,7 +631,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		elif head == TAG_NEW:
 			self._debug("\t... new")
 			string = self._read_unshared_string()
-			assert string is not None
+			if string is None:
+				raise InvalidTypedStreamError("Literal shared string cannot contain a nil unshared string")
 			self._debug(f"\t... {len(self.shared_string_table)} ~ {string!r}")
 			self.shared_string_table.append(string)
 			return string
@@ -679,11 +680,13 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		elif head == TAG_NEW:
 			self._debug("\t... new")
 			string = self._read_shared_string()
-			assert string is not None
+			if string is None:
+				raise InvalidTypedStreamError("Literal C string cannot contain a nil shared string")
 			# The typedstream format does not prevent C strings from containing zero bytes,
 			# though the NeXTSTEP/Apple writer never produces such strings,
 			# and the reader does not handle them properly.
-			assert 0 not in string
+			if 0 in string:
+				raise InvalidTypedStreamError("C string value cannot contain zero bytes")
 			cstring = CString(len(self.shared_object_table), string)
 			self._debug(f"\t... {cstring}")
 			self.shared_object_table.append(cstring)
@@ -832,7 +835,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			if isinstance(obj, Object):
 				# Object is stored literally and is not nil or a reference,
 				# so read the contents until the end of the object is reached.
-				assert obj is not None
 				next_head = self._read_head_byte()
 				while next_head != TAG_END_OF_OBJECT:
 					obj.contents.append(self.read_value(next_head))
