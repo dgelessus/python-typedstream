@@ -193,7 +193,7 @@ class ObjectReference(object):
 		return f"{type(self).__module__}.{type(self).__qualname__}({self.number!r})"
 	
 	def __str__(self) -> str:
-		return f"<reference to object {self.number}>"
+		return f"<reference to object #{self.number}>"
 
 
 class Group(object):
@@ -260,7 +260,21 @@ class Struct(object):
 		return rep
 
 
-class CString(object):
+class ReferenceNumberedObject(object):
+	"""Base class for objects that are assigned a reference number and stored in the shared object table."""
+	
+	number: int
+	
+	def __init__(self, number: int) -> None:
+		super().__init__()
+		
+		self.number = number
+	
+	def __repr__(self) -> str:
+		return f"<{type(self).__module__}.{type(self).__qualname__} #{self.number!r} at {id(self):#x}>"
+
+
+class CString(ReferenceNumberedObject):
 	"""Information about a C string as it is stored in a typedstream.
 	
 	This is a thin wrapper around a plain :class:`bytes` object.
@@ -269,37 +283,37 @@ class CString(object):
 	
 	contents: bytes
 	
-	def __init__(self, contents: bytes) -> None:
-		super().__init__()
+	def __init__(self, number: int, contents: bytes) -> None:
+		super().__init__(number)
 		
 		self.contents = contents
 	
 	def __repr__(self) -> str:
-		return f"{type(self).__module__}.{type(self).__qualname__}({self.contents!r})"
+		return f"{type(self).__module__}.{type(self).__qualname__}(number={self.number!r}, contents={self.contents!r})"
 	
 	def __str__(self) -> str:
-		return str(self.contents)
+		return f"(#{self.number}) {self.contents!r}"
 
 
-class Class(object):
+class Class(ReferenceNumberedObject):
 	"""Information about a class as it is stored at the start of objects in a typedstream."""
 	
 	name: bytes
 	version: int
 	superclass: typing.Optional[typing.Union["Class", ObjectReference]]
 	
-	def __init__(self, name: bytes, version: int, superclass: typing.Optional[typing.Union["Class", ObjectReference]]) -> None:
-		super().__init__()
+	def __init__(self, number: int, name: bytes, version: int, superclass: typing.Optional[typing.Union["Class", ObjectReference]]) -> None:
+		super().__init__(number)
 		
 		self.name = name
 		self.version = version
 		self.superclass = superclass
 	
 	def __repr__(self) -> str:
-		return f"{type(self).__module__}.{type(self).__qualname__}(name={self.name!r}, version={self.version!r}, superclass={self.superclass!r})"
+		return f"{type(self).__module__}.{type(self).__qualname__}(number={self.number!r}, name={self.name!r}, version={self.version!r}, superclass={self.superclass!r})"
 	
 	def __str__(self) -> str:
-		rep = f"{self.name.decode('ascii', errors='backslashreplace')} v{self.version}"
+		rep = f"(#{self.number}) {self.name.decode('ascii', errors='backslashreplace')} v{self.version}"
 		if self.superclass is not None:
 			rep += f", extends {self.superclass}"
 		return rep
@@ -308,10 +322,10 @@ class Class(object):
 # Placeholder value for class fields that have not been initialized yet.
 # This is needed because classes and objects have to be inserted into the shared_object_table
 # before their superclass/class fields can be set.
-CLASS_NOT_SET_YET = Class(b"<placeholder - class has not been read/set yet>", -1, None)
+CLASS_NOT_SET_YET = Class(-1, b"<placeholder - class has not been read/set yet>", -1, None)
 
 
-class Object(object):
+class Object(ReferenceNumberedObject):
 	"""Representation of an object as it is stored in a typedstream.
 	
 	Currently this is only used as a placeholder for the object in the :attr:`TypedStreamReader.shared_object_table`
@@ -321,17 +335,17 @@ class Object(object):
 	clazz: typing.Union[Class, ObjectReference]
 	contents: typing.List[TypedValue[typing.Any]]
 	
-	def __init__(self, clazz: typing.Union[Class, ObjectReference], contents: typing.List[TypedValue[typing.Any]]) -> None:
-		super().__init__()
+	def __init__(self, number: int, clazz: typing.Union[Class, ObjectReference], contents: typing.List[TypedValue[typing.Any]]) -> None:
+		super().__init__(number)
 		
 		self.clazz = clazz
 		self.contents = contents
 	
 	def __repr__(self) -> str:
-		return f"{type(self).__module__}.{type(self).__qualname__}(clazz={self.clazz!r}, contents={self.contents!r})"
+		return f"{type(self).__module__}.{type(self).__qualname__}(number={self.number!r}, clazz={self.clazz!r}, contents={self.contents!r})"
 	
 	def __str__(self) -> str:
-		rep = f"object of class {self.clazz}, "
+		rep = f"object (#{self.number}) of class {self.clazz}, "
 		if not self.contents:
 			rep += "no contents"
 		else:
@@ -352,7 +366,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 	_stream: typing.BinaryIO
 	
 	shared_string_table: typing.List[bytes]
-	shared_object_table: typing.List[typing.Union[CString, Class, Object]]
+	shared_object_table: typing.List[ReferenceNumberedObject]
 	unfinished_object_stack: typing.List[Object]
 	
 	streamer_version: int
@@ -651,7 +665,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			# though the NeXTSTEP/Apple writer never produces such strings,
 			# and the reader does not handle them properly.
 			assert 0 not in string
-			cstring = CString(string)
+			cstring = CString(len(self.shared_object_table), string)
+			self._debug(f"\t... {cstring}")
 			self.shared_object_table.append(cstring)
 			return cstring
 		else:
@@ -694,8 +709,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug(f"\t... name {name!r}")
 			version = self._read_integer(signed=True)
 			self._debug(f"\t... version {version}")
-			clazz = Class(name, version, CLASS_NOT_SET_YET)
-			self._debug(f"\t... {len(self.shared_object_table)} ~ {clazz}")
+			clazz = Class(len(self.shared_object_table), name, version, CLASS_NOT_SET_YET)
+			self._debug(f"\t... {clazz}")
 			self.shared_object_table.append(clazz)
 			# This recurses until nil (no superclass) or a reference to a previous class is found.
 			superclass = self._read_class()
@@ -744,8 +759,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return None
 		elif head == TAG_NEW:
 			self._debug("\t... new")
-			obj = Object(CLASS_NOT_SET_YET, [])
-			self._debug(f"\t... {len(self.shared_object_table)} ~ {obj}")
+			obj = Object(len(self.shared_object_table), CLASS_NOT_SET_YET, [])
+			self._debug(f"\t... {obj}")
 			self.shared_object_table.append(obj)
 			clazz = self._read_class()
 			self._debug(f"\t... of class {clazz}")
