@@ -179,6 +179,44 @@ class TypedValue(typing.Generic[_T]):
 		return f"type {self.encoding!r}: {self.value}"
 
 
+class Group(object):
+	"""Representation of a group of values packed together in a typedstream.
+	
+	This is a thin wrapper around a list,
+	to distinguish value groups from arrays
+	(which are represented as plain lists).
+	
+	Value groups in a typedstream are created by serializing multiple values with a single call to ``-[NSArchiver encodeValuesOfObjCTypes:]``.
+	This produces different serialized data than calling ``-[NSArchiver encodeValueOfObjCType:at:]`` separately for each of the values.
+	The former serializes all values' type encodings joined together into a single string,
+	followed by all of the values one immediately after another.
+	The latter serializes each value as a separate encoding/value pair.
+	
+	A :class:`Group` instance returned by :class:`TypedStreamReader` always contains at least two values.
+	Single values are returned directly and not wrapped in a :class:`Group` object.
+	Empty groups are technically supported by the typedstream format,
+	but :class:`TypedStreamReader` treats them as an error,
+	as they are never used in practice.
+	"""
+	
+	values: typing.List[TypedValue[typing.Any]]
+	
+	def __init__(self, values: typing.List[TypedValue[typing.Any]]) -> None:
+		super().__init__()
+		
+		self.values = values
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}(values={self.values!r})"
+	
+	def __str__(self) -> str:
+		rep = "group:\n"
+		for value in self.values:
+			for line in str(value).splitlines():
+				rep += "\t" + line + "\n"
+		return rep
+
+
 class Struct(object):
 	"""Representation of the contents of a C struct as it is stored in a typedstream.
 	
@@ -264,9 +302,9 @@ class Object(object):
 	"""
 	
 	clazz: Class
-	contents: typing.List[typing.List[TypedValue[typing.Any]]]
+	contents: typing.List[TypedValue[typing.Any]]
 	
-	def __init__(self, clazz: Class, contents: typing.List[typing.List[TypedValue[typing.Any]]]) -> None:
+	def __init__(self, clazz: Class, contents: typing.List[TypedValue[typing.Any]]) -> None:
 		super().__init__()
 		
 		self.clazz = clazz
@@ -281,15 +319,9 @@ class Object(object):
 			rep += "no contents"
 		else:
 			rep += "contents:\n"
-			for group in self.contents:
-				if len(group) == 1:
-					for line in str(group[0]).splitlines():
-						rep += "\t" + line + "\n"
-				else:
-					rep += "\tgroup:\n"
-					for value in group:
-						for line in str(value).splitlines():
-							rep += "\t\t" + line + "\n"
+			for value in self.contents:
+				for line in str(value).splitlines():
+					rep += "\t" + line + "\n"
 		return rep
 
 
@@ -759,7 +791,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 				self.unfinished_object_stack.append(obj)
 				next_head = self._read_head_byte()
 				while next_head != TAG_END_OF_OBJECT:
-					obj.contents.append(self.read_values(next_head))
+					obj.contents.append(self.read_value(next_head))
 					next_head = self._read_head_byte()
 				popped = self.unfinished_object_stack.pop()
 				assert popped == obj
@@ -804,12 +836,15 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		else:
 			raise InvalidTypedStreamError(f"Don't know how to read a value with type encoding {type_encoding!r}")
 	
-	def read_values(self, head: typing.Optional[int] = None, *, end_of_stream_ok: bool = False) -> typing.List[TypedValue[typing.Any]]:
-		"""Read the next group of typed values,
-		each of which may have any type (primitive or object).
+	def read_value(self, head: typing.Optional[int] = None, *, end_of_stream_ok: bool = False) -> TypedValue[typing.Any]:
+		"""Read the next typed value from the stream,
+		which may have any type (primitive or object).
 		
-		The type encoding string is decoded to determine the types of the following values,
-		which are then read and converted to Python representations.
+		The type encoding string is decoded to determine the type of the following value,
+		which is then read and converted to a Python representation.
+		
+		If the type encoding string contains more than one type,
+		all of the corresponding values are read and returned as a :class:`Group`.
 		
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
 		:param end_of_stream_ok: Whether reaching the end of the data stream is an acceptable condition.
@@ -820,7 +855,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			(not right at the beginning),
 			the exception is always an :class:`InvalidTypedStreamError`,
 			regardless of the value of this parameter.
-		:return: The read values and their type encodings.
+		:return: The read value and its type encoding.
 		"""
 		
 		self._debug("Type encoding-prefixed value")
@@ -838,7 +873,15 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			raise InvalidTypedStreamError("Encountered nil type encoding string")
 		elif not encodings:
 			raise InvalidTypedStreamError("Encountered empty type encoding string")
-		return [
+		
+		values = [
 			TypedValue(encoding, self._read_value_with_encoding(encoding))
 			for encoding in _split_encodings(encodings)
 		]
+		assert values
+		if len(values) == 1:
+			(value,) = values
+			assert value.encoding == encodings
+			return value
+		else:
+			return TypedValue(encodings, Group(values))

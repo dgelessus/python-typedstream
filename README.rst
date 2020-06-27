@@ -81,7 +81,7 @@ Examples
 
     >>> import typedstream
     >>> ts = typedstream.TypedStreamReader.open("/Applications/Stickies.app/Contents/Resources/English.lproj/StickiesDefaultDatabase")
-    >>> (root,) = ts.read_values()
+    >>> root = ts.read_value()
     >>> print(root)
     type b'@': object of class NSMutableArray v0, extends NSArray v0, extends NSObject v0, contents:
         type b'i': 2
@@ -89,7 +89,7 @@ Examples
             type b'@': object of class NSMutableData v0, extends NSData v0, extends NSObject v0, contents:
                 type b'i': 2461
     # ...
-    >>> root.value.contents[0][0].value
+    >>> root.value.contents[0].value
     2
 
 Command-line interface

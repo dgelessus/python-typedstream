@@ -78,12 +78,11 @@ Read and display the contents of a typedstream file.
 			print()
 			while True:
 				try:
-					values = ts.read_values(end_of_stream_ok=True)
+					value = ts.read_value(end_of_stream_ok=True)
 				except EOFError:
 					break
 				
-				for value in values:
-					print(value)
+				print(value)
 		sys.exit(0)
 	else:
 		print(f"Unknown subcommand: {ns.subcommand!r}", file=sys.stderr)
