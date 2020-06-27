@@ -388,7 +388,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 	
 	shared_string_table: typing.List[bytes]
 	shared_object_table: typing.List[ReferenceNumberedObject]
-	unfinished_object_stack: typing.List[Object]
 	
 	streamer_version: int
 	byte_order: str
@@ -427,7 +426,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		
 		self.shared_string_table = []
 		self.shared_object_table = []
-		self.unfinished_object_stack = []
 		
 		try:
 			self._read_header()
@@ -835,13 +833,10 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 				# Object is stored literally and is not nil or a reference,
 				# so read the contents until the end of the object is reached.
 				assert obj is not None
-				self.unfinished_object_stack.append(obj)
 				next_head = self._read_head_byte()
 				while next_head != TAG_END_OF_OBJECT:
 					obj.contents.append(self.read_value(next_head))
 					next_head = self._read_head_byte()
-				popped = self.unfinished_object_stack.pop()
-				assert popped == obj
 			return obj
 		elif type_encoding.startswith(b"["):
 			if not type_encoding.endswith(b"]"):
