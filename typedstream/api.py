@@ -179,6 +179,23 @@ class TypedValue(typing.Generic[_T]):
 		return f"type {self.encoding!r}: {self.value}"
 
 
+class ObjectReference(object):
+	"""A reference to a previously read object."""
+	
+	number: int
+	
+	def __init__(self, number: int) -> None:
+		super().__init__()
+		
+		self.number = number
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}({self.number!r})"
+	
+	def __str__(self) -> str:
+		return f"<reference to object {self.number}>"
+
+
 class Group(object):
 	"""Representation of a group of values packed together in a typedstream.
 	
@@ -269,9 +286,9 @@ class Class(object):
 	
 	name: bytes
 	version: int
-	superclass: typing.Optional["Class"]
+	superclass: typing.Optional[typing.Union["Class", ObjectReference]]
 	
-	def __init__(self, name: bytes, version: int, superclass: typing.Optional["Class"]) -> None:
+	def __init__(self, name: bytes, version: int, superclass: typing.Optional[typing.Union["Class", ObjectReference]]) -> None:
 		super().__init__()
 		
 		self.name = name
@@ -301,10 +318,10 @@ class Object(object):
 	to make the reference numbering work as required.
 	"""
 	
-	clazz: Class
+	clazz: typing.Union[Class, ObjectReference]
 	contents: typing.List[TypedValue[typing.Any]]
 	
-	def __init__(self, clazz: Class, contents: typing.List[TypedValue[typing.Any]]) -> None:
+	def __init__(self, clazz: typing.Union[Class, ObjectReference], contents: typing.List[TypedValue[typing.Any]]) -> None:
 		super().__init__()
 		
 		self.clazz = clazz
@@ -594,18 +611,31 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug(f"\t~ {string!r}")
 			return string
 	
-	def _read_c_string(self, head: typing.Optional[int] = None) -> typing.Optional[CString]:
+	def _read_object_reference(self, head: typing.Optional[int] = None) -> ObjectReference:
+		"""
+		
+		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
+		:return: The read object reference.
+		"""
+		
+		self._debug("Object reference")
+		reference_number = self._read_integer(head, signed=True)
+		self._debug(f"... number {reference_number}")
+		decoded = _decode_reference_number(reference_number)
+		self._debug(f"... decoded to {decoded}")
+		return ObjectReference(decoded)
+	
+	def _read_c_string(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[CString, ObjectReference]]:
 		"""Read a C string value.
 		
 		A C string value may either be stored literally
 		or as a reference to a previous literally stored C string value.
-		Literal C string values are appended to the :attr:`shared_object_table` as they are being read,
-		so that they can be referenced by later non-literal C string values.
-		This happens transparently to the caller -
-		in both cases the actual C string value is returned.
+		Literal C string values are appended to the :attr:`shared_object_table` as they are being read.
+		C string values stored as references are returned as :class:`ObjectReference` objects
+		and are not automatically dereferenced.
 		
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
-		:return: The read C string value, which may be ``nil``/``None``.
+		:return: The read C string value or reference, which may be ``nil``/``None``.
 		"""
 		
 		self._debug("C string")
@@ -626,16 +656,9 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return cstring
 		else:
 			self._debug("\t... reference")
-			reference_number = self._read_integer(head, signed=True)
-			decoded = _decode_reference_number(reference_number)
-			self._debug(f"\t... number {decoded}")
-			referenced = self.shared_object_table[decoded]
-			if not isinstance(referenced, CString):
-				raise InvalidTypedStreamError(f"Expected reference to a CString, not {type(referenced)}")
-			self._debug(f"\t~ {referenced}")
-			return referenced
+			return self._read_object_reference(head)
 	
-	def _read_class(self, head: typing.Optional[int] = None) -> typing.Optional[Class]:
+	def _read_class(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[Class, ObjectReference]]:
 		"""Read a class object.
 		
 		Class objects are only found at the start of an object (indicating the object's class),
@@ -643,10 +666,9 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		
 		A class object may either be stored literally
 		or as a reference to a previous literally stored class object.
-		Literal class objects are appended to the :attr:`shared_object_table` as they are being read,
-		so that they can be referenced by later non-literal class objects.
-		This happens transparently to the caller -
-		in both cases the actual class object is returned.
+		Literal class objects are appended to the :attr:`shared_object_table` as they are being read.
+		Class objects stored as references are returned as :class:`ObjectReference` objects
+		and are not automatically dereferenced.
 		
 		Because of how the typedstream format expects references to be numbered,
 		classes are already added to :attr:`shared_object_table` before they are fully initialized.
@@ -656,7 +678,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		it is fully initialized.
 		
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
-		:return: The fully decoded class object, which may be ``Nil``/``None``.
+		:return: The read class object or reference, which may be ``Nil``/``None``.
 		"""
 		
 		self._debug("Class")
@@ -682,25 +704,17 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return clazz
 		else:
 			self._debug("\t... reference")
-			reference_number = self._read_integer(head, signed=True)
-			decoded = _decode_reference_number(reference_number)
-			self._debug(f"\t... number {decoded}")
-			referenced = self.shared_object_table[decoded]
-			self._debug(f"\t~ {referenced}")
-			if not isinstance(referenced, Class):
-				raise InvalidTypedStreamError(f"Expected reference to a Class, not {type(referenced)}")
-			return referenced
+			return self._read_object_reference(head)
 	
-	def _read_object_start(self, head: typing.Optional[int] = None) -> typing.Tuple[typing.Optional[Object], bool]:
+	def _read_object_start(self, head: typing.Optional[int] = None) -> typing.Tuple[typing.Optional[typing.Union[Object, ObjectReference]], bool]:
 		"""Read the start of an object,
 		i. e. its class information.
 		
 		An object may either be stored literally
 		or as a reference to a previous literally stored object.
-		Literal objects are appended to the :attr:`shared_object_table` as they are being read,
-		so that they can be referenced by later non-literal objects.
-		In both cases an object value is returned,
-		although the two cases need to be handled differently by the caller.
+		Literal objects are appended to the :attr:`shared_object_table` as they are being read.
+		Objects stored as references are returned as :class:`ObjectReference` objects
+		and are not automatically dereferenced.
 		
 		If the second return value is true,
 		the object is stored literally.
@@ -721,7 +735,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		it is fully initialized.
 		
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
-		:return: A tuple containing the object (which may be ``nil``/``None``),
+		:return: A tuple containing the object or reference (which may be ``nil``/``None``),
 			and a boolean indicating whether the object's contents need to be read by the caller.
 		"""
 		
@@ -743,14 +757,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			return obj, True
 		else:
 			self._debug("\t... reference")
-			reference_number = self._read_integer(head, signed=True)
-			decoded = _decode_reference_number(reference_number)
-			self._debug(f"\t... number {decoded}")
-			referenced = self.shared_object_table[decoded]
-			self._debug(f"\t~ {referenced}")
-			if not isinstance(referenced, Object):
-				raise InvalidTypedStreamError(f"Expected reference to an Object, not {type(referenced)}")
-			return referenced, False
+			return self._read_object_reference(head), False
 	
 	def _read_value_with_encoding(self, type_encoding: bytes, head: typing.Optional[int] = None) -> typing.Any:
 		"""Read a single value with the type indicated by the given type encoding.
