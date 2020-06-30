@@ -1,3 +1,4 @@
+import abc
 import os
 import struct
 import types
@@ -157,10 +158,61 @@ def _split_encodings(encodings: bytes) -> typing.Iterable[bytes]:
 		start = end
 
 
+class SupportsAsMultilineString(typing.Protocol):
+	"""Protocol for objects that provide a custom multiline string representation,
+	for use by :func:`as_multiline_string`.
+	"""
+	
+	def _as_multiline_string_(self) -> typing.Iterable[str]:
+		"""Convert ``self`` to a multiline string representation.
+		
+		This method should not be called directly -
+		use :func:`as_multiline_string` instead.
+		
+		:return: The string representation as an iterable of lines (line terminators not included).
+		"""
+		
+		...
+
+
+class AsMultilineStringBase(abc.ABC, SupportsAsMultilineString):
+	"""Convenience base class for classes that want to implement a custom multiline string representation,
+	for use by :func:`as_multiline_string`.
+	
+	This provides an implementation of ``__str__`` based on :meth:`~SupportsAsMultilineString._as_multiline_string_`.
+	"""
+	
+	@abc.abstractmethod
+	def _as_multiline_string_(self) -> typing.Iterable[str]:
+		raise NotImplementedError()
+	
+	def __str__(self) -> str:
+		return "\n".join(self._as_multiline_string_())
+
+
+def as_multiline_string(obj: object) -> typing.Iterable[str]:
+	"""Convert an object to a multiline string representation.
+	
+	If the object has an :meth:`~SupportsAsMultilineString._as_multiline_string_` method,
+	it is used to create the multiline string representation.
+	Otherwise,
+	the object is converted to a string using default :class:`str` conversion,
+	and then split into an iterable of lines.
+	
+	:param obj: The object to represent.
+	:return: The string representation as an iterable of lines (line terminators not included).
+	"""
+	
+	if hasattr(obj, "_as_multiline_string_"):
+		return obj._as_multiline_string_()
+	else:
+		return str(obj).splitlines()
+
+
 _T = typing.TypeVar("_T")
 
 
-class TypedValue(typing.Generic[_T]):
+class TypedValue(AsMultilineStringBase, typing.Generic[_T]):
 	"""Wrapper for an arbitrary value with an attached type encoding."""
 	
 	encoding: bytes
@@ -175,8 +227,10 @@ class TypedValue(typing.Generic[_T]):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(type_encoding={self.encoding!r}, value={self.value!r})"
 	
-	def __str__(self) -> str:
-		return f"type {self.encoding!r}: {self.value}"
+	def _as_multiline_string_(self) -> typing.Iterable[str]:
+		value_it = iter(as_multiline_string(self.value))
+		yield f"type {self.encoding!r}: {next(value_it)}"
+		yield from value_it
 
 
 _RNO = typing.TypeVar("_RNO", bound="ReferenceNumberedObject")
@@ -201,7 +255,7 @@ class ObjectReference(typing.Generic[_RNO]):
 		return f"<reference to {self.referenced_type.__qualname__} #{self.number}>"
 
 
-class Group(object):
+class Group(AsMultilineStringBase):
 	"""Representation of a group of values packed together in a typedstream.
 	
 	This is a thin wrapper around a list,
@@ -231,15 +285,14 @@ class Group(object):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(values={self.values!r})"
 	
-	def __str__(self) -> str:
-		rep = "group:\n"
+	def _as_multiline_string_(self) -> typing.Iterable[str]:
+		yield "group:"
 		for value in self.values:
-			for line in str(value).splitlines():
-				rep += "\t" + line + "\n"
-		return rep
+			for line in as_multiline_string(value):
+				yield "\t" + line
 
 
-class Struct(object):
+class Struct(AsMultilineStringBase):
 	"""Representation of the contents of a C struct as it is stored in a typedstream.
 	
 	This is a thin wrapper around a list,
@@ -257,12 +310,11 @@ class Struct(object):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(fields={self.fields!r})"
 	
-	def __str__(self) -> str:
-		rep = "struct:\n"
+	def _as_multiline_string_(self) -> typing.Iterable[str]:
+		yield "struct:"
 		for field_value in self.fields:
-			for line in str(field_value).splitlines():
-				rep += "\t" + line + "\n"
-		return rep
+			for line in as_multiline_string(field_value):
+				yield "\t" + line
 
 
 class Selector(object):
@@ -351,7 +403,7 @@ class Class(ReferenceNumberedObject):
 CLASS_NOT_SET_YET = Class(-1, b"<placeholder - class has not been read/set yet>", -1, None)
 
 
-class Object(ReferenceNumberedObject):
+class Object(ReferenceNumberedObject, AsMultilineStringBase):
 	"""Representation of an object as it is stored in a typedstream.
 	
 	Currently this is only used as a placeholder for the object in the :attr:`TypedStreamReader.shared_object_table`
@@ -370,16 +422,15 @@ class Object(ReferenceNumberedObject):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(number={self.number!r}, clazz={self.clazz!r}, contents={self.contents!r})"
 	
-	def __str__(self) -> str:
-		rep = f"object (#{self.number}) of class {self.clazz}, "
+	def _as_multiline_string_(self) -> typing.Iterable[str]:
+		first = f"object (#{self.number}) of class {self.clazz}, "
 		if not self.contents:
-			rep += "no contents"
+			yield first + "no contents"
 		else:
-			rep += "contents:\n"
+			yield first + "contents:"
 			for value in self.contents:
-				for line in str(value).splitlines():
-					rep += "\t" + line + "\n"
-		return rep
+				for line in as_multiline_string(value):
+					yield "\t" + line
 
 
 class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):

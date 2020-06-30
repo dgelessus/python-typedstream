@@ -93,7 +93,8 @@ Read and display the contents of a typedstream file.
 			values = context.resolve_references_inplace(values)
 		
 		for value in values:
-			print(value)
+			for line in api.as_multiline_string(value):
+				print(line)
 		
 		sys.exit(0)
 	else:
