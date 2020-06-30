@@ -951,3 +951,87 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 					return
 				else:
 					raise
+
+
+class ReferenceContext(object):
+	"""Context for resolving references in data read from a typedstream."""
+	
+	shared_object_table: typing.List[ReferenceNumberedObject]
+	do_not_resolve_types: typing.Set[typing.Type[ReferenceNumberedObject]]
+	
+	_already_visited_ids: typing.Set[int]
+	
+	def __init__(
+		self,
+		shared_object_table: typing.List[ReferenceNumberedObject],
+		*,
+		do_not_resolve_types: typing.Set[typing.Type[ReferenceNumberedObject]] = (),
+	) -> None:
+		super().__init__()
+		
+		self.shared_object_table = shared_object_table
+		self.do_not_resolve_types = do_not_resolve_types
+		
+		self._already_visited_ids = set()
+	
+	def resolve_references_inplace(self, value: typing.Any) -> typing.Any:
+		"""Recursively traverse the given data structure and resolve any references inside of it,
+		replacing them with the objects that they refer to.
+		
+		All references are resolved in-place,
+		i. e. the original data structure is modified.
+		This is necessary to support resolving circular/recursive references.
+		
+		:param value: The data structure in which to resolve references.
+			All types produced by :class:`TypedStreamReader` are supported.
+		:return: If ``value`` is an :class:`ObjectReference`,
+			the object that the reference refers to is returned.
+			Otherwise,
+			``value`` is returned
+			(as any references inside it have been resolved in-place).
+		"""
+		
+		if id(value) in self._already_visited_ids:
+			return value
+		elif isinstance(value, ObjectReference):
+			if value.referenced_type in self.do_not_resolve_types:
+				return value
+			
+			try:
+				referenced = self.shared_object_table[value.number]
+			except IndexError:
+				raise InvalidTypedStreamError(f"Object #{value.number} does not exist in shared object table (expected a {value.referenced_type})")
+			
+			if not isinstance(referenced, value.referenced_type):
+				raise InvalidTypedStreamError(f"Expected object #{value.number} to be a {value.referenced_type}, not {type(referenced)}")
+			
+			return referenced
+		elif isinstance(value, TypedValue):
+			value.value = self.resolve_references_inplace(value.value)
+			return value
+		elif isinstance(value, Group):
+			value.values = self.resolve_references_inplace(value.values)
+			return value
+		elif isinstance(value, Struct):
+			value.fields = self.resolve_references_inplace(value.fields)
+			return value
+		elif isinstance(value, Class):
+			if value is CLASS_NOT_SET_YET:
+				raise ValueError("Encountered unset class while resolving references")
+			
+			value.superclass = self.resolve_references_inplace(value.superclass)
+			return value
+		elif isinstance(value, Object):
+			value.clazz = self.resolve_references_inplace(value.clazz)
+			value.contents = self.resolve_references_inplace(value.contents)
+			return value
+		elif isinstance(value, list):
+			for i, v in enumerate(value):
+				value[i] = self.resolve_references_inplace(v)
+			return value
+		elif value is None or isinstance(value, (int, float, bytes, Selector, CString)):
+			# These values do not contain any references,
+			# so no further recursion is needed.
+			return value
+		else:
+			raise TypeError(f"Encountered an unexpected type while resolving references: {type(value)}")
