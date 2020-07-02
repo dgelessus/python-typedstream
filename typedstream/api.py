@@ -158,11 +158,14 @@ def _split_encodings(encodings: bytes) -> typing.Iterable[bytes]:
 		start = end
 
 
-class SupportsAsMultilineString(typing.Protocol):
-	"""Protocol for objects that provide a custom multiline string representation,
+class AsMultilineStringBase(abc.ABC):
+	"""Base class for classes that want to implement a custom multiline string representation,
 	for use by :func:`as_multiline_string`.
+	
+	This also provides an implementation of ``__str__`` based on :meth:`~AsMultilineStringBase._as_multiline_string_`.
 	"""
 	
+	@abc.abstractmethod
 	def _as_multiline_string_(self) -> typing.Iterable[str]:
 		"""Convert ``self`` to a multiline string representation.
 		
@@ -172,18 +175,6 @@ class SupportsAsMultilineString(typing.Protocol):
 		:return: The string representation as an iterable of lines (line terminators not included).
 		"""
 		
-		...
-
-
-class AsMultilineStringBase(abc.ABC, SupportsAsMultilineString):
-	"""Convenience base class for classes that want to implement a custom multiline string representation,
-	for use by :func:`as_multiline_string`.
-	
-	This provides an implementation of ``__str__`` based on :meth:`~SupportsAsMultilineString._as_multiline_string_`.
-	"""
-	
-	@abc.abstractmethod
-	def _as_multiline_string_(self) -> typing.Iterable[str]:
 		raise NotImplementedError()
 	
 	def __str__(self) -> str:
@@ -193,7 +184,7 @@ class AsMultilineStringBase(abc.ABC, SupportsAsMultilineString):
 def as_multiline_string(obj: object) -> typing.Iterable[str]:
 	"""Convert an object to a multiline string representation.
 	
-	If the object has an :meth:`~SupportsAsMultilineString._as_multiline_string_` method,
+	If the object has an :meth:`~AsMultilineStringBase._as_multiline_string_` method,
 	it is used to create the multiline string representation.
 	Otherwise,
 	the object is converted to a string using default :class:`str` conversion,
@@ -203,7 +194,7 @@ def as_multiline_string(obj: object) -> typing.Iterable[str]:
 	:return: The string representation as an iterable of lines (line terminators not included).
 	"""
 	
-	if hasattr(obj, "_as_multiline_string_"):
+	if isinstance(obj, AsMultilineStringBase):
 		return obj._as_multiline_string_()
 	else:
 		return str(obj).splitlines()
