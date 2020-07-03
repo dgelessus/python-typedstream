@@ -158,6 +158,61 @@ def _split_encodings(encodings: bytes) -> typing.Iterable[bytes]:
 		start = end
 
 
+class RecursiveReprState(object):
+	"""Holds state during recursive calls to :func:`repr`/``__repr__``-like functions,
+	to track which objects have already been rendered before or are currently still being rendered.
+	
+	This state is used to avoid infinite recursion in case of circular references,
+	and to avoid rendering large data structures more than once.
+	"""
+	
+	class _Context(typing.ContextManager[None]):
+		state: "RecursiveReprState"
+		obj: object
+		
+		def __init__(self, state: "RecursiveReprState", obj: object) -> None:
+			super().__init__()
+			
+			self.state = state
+			self.obj = obj
+		
+		def __enter__(self) -> None:
+			if self.obj is not None:
+				self.state.already_rendered_ids.add(id(self.obj))
+				self.state.currently_rendering_ids.append(id(self.obj))
+		
+		def __exit__(
+			self,
+			exc_type: typing.Optional[typing.Type[BaseException]],
+			exc_val: typing.Optional[BaseException],
+			exc_tb: typing.Optional[types.TracebackType],
+		) -> typing.Optional[bool]:
+			if self.obj is not None:
+				popped = self.state.currently_rendering_ids.pop()
+				assert popped == id(self.obj)
+			return None
+	
+	already_rendered_ids: typing.Set[int]
+	currently_rendering_ids: typing.List[int]
+	
+	def __init__(self, already_seen_ids: typing.Set[int], ids_stack: typing.List[int]) -> None:
+		super().__init__()
+		
+		self.already_rendered_ids = already_seen_ids
+		self.currently_rendering_ids = ids_stack
+	
+	def _representing(self, obj: object) -> typing.ContextManager[None]:
+		"""Create a context manager to indicate when the given object is being processed.
+		
+		When the context manager is entered,
+		``id(obj)`` is added to :attr:`already_rendered_ids` and :attr:`currently_rendering_ids`.
+		When it is exited,
+		``id(obj)`` is removed again from :attr:`currently_rendering_ids` (but not from :attr:`already_rendered_ids`).
+		"""
+		
+		return RecursiveReprState._Context(self, obj)
+
+
 class AsMultilineStringBase(abc.ABC):
 	"""Base class for classes that want to implement a custom multiline string representation,
 	for use by :func:`as_multiline_string`.
@@ -166,22 +221,28 @@ class AsMultilineStringBase(abc.ABC):
 	"""
 	
 	@abc.abstractmethod
-	def _as_multiline_string_(self) -> typing.Iterable[str]:
+	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
 		"""Convert ``self`` to a multiline string representation.
 		
 		This method should not be called directly -
 		use :func:`as_multiline_string` instead.
 		
+		:param state: A state object used to track repeated or recursive calls for the same object.
 		:return: The string representation as an iterable of lines (line terminators not included).
 		"""
 		
 		raise NotImplementedError()
 	
 	def __str__(self) -> str:
-		return "\n".join(self._as_multiline_string_())
+		return "\n".join(self._as_multiline_string_(state=RecursiveReprState(set(), [])))
 
 
-def as_multiline_string(obj: object) -> typing.Iterable[str]:
+def as_multiline_string(
+	obj: object,
+	*,
+	calling_self: typing.Optional[object] = None,
+	state: typing.Optional[RecursiveReprState] = None,
+) -> typing.Iterable[str]:
 	"""Convert an object to a multiline string representation.
 	
 	If the object has an :meth:`~AsMultilineStringBase._as_multiline_string_` method,
@@ -191,13 +252,23 @@ def as_multiline_string(obj: object) -> typing.Iterable[str]:
 	and then split into an iterable of lines.
 	
 	:param obj: The object to represent.
+	:param calling_self: The object that is asking for the representation.
+		This must be set when calling from an :meth:`~AsMultilineStringBase._as_multiline_string_` implementation,
+		so that repeated and recursive calls are tracked properly.
+	:param state: A state object from an outer :func:`as_multiline_string` call.
+		This must be set when calling from an :meth:`~AsMultilineStringBase._as_multiline_string_` implementation,
+		so that repeated and recursive calls are tracked properly.
 	:return: The string representation as an iterable of lines (line terminators not included).
 	"""
 	
 	if isinstance(obj, AsMultilineStringBase):
-		return obj._as_multiline_string_()
+		if state is None:
+			state = RecursiveReprState(set(), [])
+		
+		with state._representing(calling_self):
+			yield from obj._as_multiline_string_(state=state)
 	else:
-		return str(obj).splitlines()
+		yield from str(obj).splitlines()
 
 
 _T = typing.TypeVar("_T")
@@ -218,8 +289,8 @@ class TypedValue(AsMultilineStringBase, typing.Generic[_T]):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(type_encoding={self.encoding!r}, value={self.value!r})"
 	
-	def _as_multiline_string_(self) -> typing.Iterable[str]:
-		value_it = iter(as_multiline_string(self.value))
+	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
+		value_it = iter(as_multiline_string(self.value, calling_self=self, state=state))
 		yield f"type {self.encoding!r}: {next(value_it)}"
 		yield from value_it
 
@@ -276,10 +347,10 @@ class Group(AsMultilineStringBase):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(values={self.values!r})"
 	
-	def _as_multiline_string_(self) -> typing.Iterable[str]:
+	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
 		yield "group:"
 		for value in self.values:
-			for line in as_multiline_string(value):
+			for line in as_multiline_string(value, calling_self=self, state=state):
 				yield "\t" + line
 
 
@@ -301,10 +372,10 @@ class Struct(AsMultilineStringBase):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(fields={self.fields!r})"
 	
-	def _as_multiline_string_(self) -> typing.Iterable[str]:
+	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
 		yield "struct:"
 		for field_value in self.fields:
-			for line in as_multiline_string(field_value):
+			for line in as_multiline_string(field_value, calling_self=self, state=state):
 				yield "\t" + line
 
 
@@ -364,7 +435,7 @@ class CString(ReferenceNumberedObject):
 		return f"(#{self.number}) {self.contents!r}"
 
 
-class Class(ReferenceNumberedObject):
+class Class(ReferenceNumberedObject, AsMultilineStringBase):
 	"""Information about a class as it is stored at the start of objects in a typedstream."""
 	
 	name: bytes
@@ -381,11 +452,18 @@ class Class(ReferenceNumberedObject):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(number={self.number!r}, name={self.name!r}, version={self.version!r}, superclass={self.superclass!r})"
 	
-	def __str__(self) -> str:
+	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
 		rep = f"(#{self.number}) {self.name.decode('ascii', errors='backslashreplace')} v{self.version}"
-		if self.superclass is not None:
-			rep += f", extends {self.superclass}"
-		return rep
+		if id(self) in state.currently_rendering_ids:
+			rep += ", ... (cycle in superclass chain)"
+			yield rep
+		elif self.superclass is not None:
+			superclass_it = iter(as_multiline_string(self.superclass, calling_self=self, state=state))
+			rep += f", extends {next(superclass_it)}"
+			yield rep
+			yield from superclass_it
+		else:
+			yield rep
 
 
 # Placeholder value for class fields that have not been initialized yet.
@@ -413,14 +491,18 @@ class Object(ReferenceNumberedObject, AsMultilineStringBase):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(number={self.number!r}, clazz={self.clazz!r}, contents={self.contents!r})"
 	
-	def _as_multiline_string_(self) -> typing.Iterable[str]:
-		first = f"object (#{self.number}) of class {self.clazz}, "
-		if not self.contents:
-			yield first + "no contents"
+	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
+		first = f"object (#{self.number}) of class {self.clazz}"
+		if id(self) in state.currently_rendering_ids:
+			yield first + " (circular reference)"
+		elif id(self) in state.already_rendered_ids:
+			yield first + " (backreference)"
+		elif not self.contents:
+			yield first + ", no contents"
 		else:
-			yield first + "contents:"
+			yield first + ", contents:"
 			for value in self.contents:
-				for line in as_multiline_string(value):
+				for line in as_multiline_string(value, calling_self=self, state=state):
 					yield "\t" + line
 
 
