@@ -473,11 +473,7 @@ CLASS_NOT_SET_YET = Class(-1, b"<placeholder - class has not been read/set yet>"
 
 
 class Object(ReferenceNumberedObject, AsMultilineStringBase):
-	"""Representation of an object as it is stored in a typedstream.
-	
-	Currently this is only used as a placeholder for the object in the :attr:`TypedStreamReader.shared_object_table`
-	to make the reference numbering work as required.
-	"""
+	"""Representation of an object as it is stored in a typedstream."""
 	
 	clazz: typing.Union[Class, ObjectReference[Class]]
 	contents: typing.List[TypedValue[typing.Any]]
