@@ -919,6 +919,30 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug("\t... reference")
 			return self._read_object_reference(Object, head)
 	
+	def _read_object(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[Object, ObjectReference[Object]]]:
+		"""Read an entire object,
+		including its contents.
+		
+		An object may either be stored literally
+		or as a reference to a previous literally stored object.
+		Literal objects are returned as :class:`Object`s.
+		Objects stored as references are returned as :class:`ObjectReference` objects
+		and are not automatically dereferenced.
+		
+		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
+		:return: The read object or reference, which may be ``nil``/``None``.
+		"""
+		
+		obj = self._read_object_start(head)
+		if isinstance(obj, Object):
+			# Object is stored literally and is not nil or a reference,
+			# so read the contents until the end of the object is reached.
+			next_head = self._read_head_byte()
+			while next_head != TAG_END_OF_OBJECT:
+				obj.contents.append(self.read_value(next_head))
+				next_head = self._read_head_byte()
+		return obj
+	
 	def _read_value_with_encoding(self, type_encoding: bytes, head: typing.Optional[int] = None) -> typing.Any:
 		"""Read a single value with the type indicated by the given type encoding.
 		
@@ -956,15 +980,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		elif type_encoding == b"#":
 			return self._read_class(head)
 		elif type_encoding == b"@":
-			obj = self._read_object_start(head)
-			if isinstance(obj, Object):
-				# Object is stored literally and is not nil or a reference,
-				# so read the contents until the end of the object is reached.
-				next_head = self._read_head_byte()
-				while next_head != TAG_END_OF_OBJECT:
-					obj.contents.append(self.read_value(next_head))
-					next_head = self._read_head_byte()
-			return obj
+			return self._read_object(head)
 		elif type_encoding.startswith(b"["):
 			if not type_encoding.endswith(b"]"):
 				raise InvalidTypedStreamError(f"Missing closing bracket in array type encoding {type_encoding!r}")
