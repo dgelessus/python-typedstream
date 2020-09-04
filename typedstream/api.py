@@ -1077,7 +1077,7 @@ class ReferenceContext(object):
 	"""Context for resolving references in data read from a typedstream."""
 	
 	shared_object_table: typing.List[ReferenceNumberedObject]
-	do_not_resolve_types: typing.Set[typing.Type[ReferenceNumberedObject]]
+	do_not_resolve_types: typing.Container[typing.Type[ReferenceNumberedObject]]
 	
 	_already_visited_ids: typing.Set[int]
 	
@@ -1085,7 +1085,7 @@ class ReferenceContext(object):
 		self,
 		shared_object_table: typing.List[ReferenceNumberedObject],
 		*,
-		do_not_resolve_types: typing.Set[typing.Type[ReferenceNumberedObject]] = (),
+		do_not_resolve_types: typing.Container[typing.Type[ReferenceNumberedObject]] = (),
 	) -> None:
 		super().__init__()
 		
