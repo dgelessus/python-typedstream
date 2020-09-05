@@ -1,4 +1,5 @@
 import abc
+import enum
 import os
 import struct
 import types
@@ -271,112 +272,60 @@ def as_multiline_string(
 		yield from str(obj).splitlines()
 
 
-_T = typing.TypeVar("_T")
-
-
-class TypedValue(AsMultilineStringBase, typing.Generic[_T]):
-	"""Wrapper for an arbitrary value with an attached type encoding."""
+class BeginTypedValues(object):
+	"""Marks the beginning of a group of values prefixed by a type encoding string."""
 	
-	encoding: bytes
-	value: _T
+	encodings: typing.Sequence[bytes]
 	
-	def __init__(self, encoding: bytes, value: _T) -> None:
+	def __init__(self, encodings: typing.Sequence[bytes]) -> None:
 		super().__init__()
 		
-		self.encoding = encoding
-		self.value = value
+		self.encodings = encodings
 	
 	def __repr__(self) -> str:
-		return f"{type(self).__module__}.{type(self).__qualname__}(type_encoding={self.encoding!r}, value={self.value!r})"
+		return f"{type(self).__module__}.{type(self).__qualname__}({self.encodings!r})"
 	
-	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
-		value_it = iter(as_multiline_string(self.value, calling_self=self, state=state))
-		yield f"type {self.encoding!r}: {next(value_it)}"
-		yield from value_it
+	def __str__(self) -> str:
+		return f"begin typed values (types {self.encodings!r})"
 
 
-_RNO = typing.TypeVar("_RNO", bound="ReferenceNumberedObject")
+class EndTypedValues(object):
+	"""Marks the end of a group of values prefixed by a type encoding string.
+	
+	This event is provided for convenience and doesn't correspond to any data in the typedstream.
+	"""
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}()"
+	
+	def __str__(self) -> str:
+		return "end typed values"
 
 
-class ObjectReference(typing.Generic[_RNO]):
+class ObjectReference(object):
 	"""A reference to a previously read object."""
 	
-	referenced_type: typing.Type[_RNO]
+	class Type(enum.Enum):
+		"""Describes what type of object a reference refers to."""
+		
+		C_STRING = "C string"
+		CLASS = "class"
+		OBJECT = "object"
+	
+	referenced_type: "ObjectReference.Type"
 	number: int
 	
-	def __init__(self, referenced_type: typing.Type[_RNO], number: int) -> None:
+	def __init__(self, referenced_type: "ObjectReference.Type", number: int) -> None:
 		super().__init__()
 		
 		self.referenced_type = referenced_type
 		self.number = number
 	
 	def __repr__(self) -> str:
-		return f"{type(self).__module__}.{type(self).__qualname__}({self.referenced_type.__qualname__}, {self.number!r})"
+		return f"{type(self).__module__}.{type(self).__qualname__}({self.referenced_type}, {self.number!r})"
 	
 	def __str__(self) -> str:
-		return f"<reference to {self.referenced_type.__qualname__} #{self.number}>"
-
-
-class Group(AsMultilineStringBase):
-	"""Representation of a group of values packed together in a typedstream.
-	
-	This is a thin wrapper around a list,
-	to distinguish value groups from arrays
-	(which are represented as plain lists).
-	
-	Value groups in a typedstream are created by serializing multiple values with a single call to ``-[NSArchiver encodeValuesOfObjCTypes:]``.
-	This produces different serialized data than calling ``-[NSArchiver encodeValueOfObjCType:at:]`` separately for each of the values.
-	The former serializes all values' type encodings joined together into a single string,
-	followed by all of the values one immediately after another.
-	The latter serializes each value as a separate encoding/value pair.
-	
-	A :class:`Group` instance returned by :class:`TypedStreamReader` always contains at least two values.
-	Single values are returned directly and not wrapped in a :class:`Group` object.
-	Empty groups are technically supported by the typedstream format,
-	but :class:`TypedStreamReader` treats them as an error,
-	as they are never used in practice.
-	"""
-	
-	values: typing.List[TypedValue[typing.Any]]
-	
-	def __init__(self, values: typing.List[TypedValue[typing.Any]]) -> None:
-		super().__init__()
-		
-		self.values = values
-	
-	def __repr__(self) -> str:
-		return f"{type(self).__module__}.{type(self).__qualname__}(values={self.values!r})"
-	
-	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
-		yield "group:"
-		for value in self.values:
-			for line in as_multiline_string(value, calling_self=self, state=state):
-				yield "\t" + line
-
-
-class Struct(AsMultilineStringBase):
-	"""Representation of the contents of a C struct as it is stored in a typedstream.
-	
-	This is a thin wrapper around a list,
-	to distinguish structs from arrays
-	(which are represented as plain lists).
-	"""
-	
-	fields: typing.List[TypedValue[typing.Any]]
-	
-	def __init__(self, fields: typing.List[TypedValue[typing.Any]]) -> None:
-		super().__init__()
-		
-		self.fields = fields
-	
-	def __repr__(self) -> str:
-		return f"{type(self).__module__}.{type(self).__qualname__}(fields={self.fields!r})"
-	
-	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
-		yield "struct:"
-		for field_value in self.fields:
-			for line in as_multiline_string(field_value, calling_self=self, state=state):
-				yield "\t" + line
+		return f"<reference to {self.referenced_type.value} #{self.number}>"
 
 
 class Selector(object):
@@ -400,21 +349,7 @@ class Selector(object):
 		return f"selector: {self.name!r}"
 
 
-class ReferenceNumberedObject(object):
-	"""Base class for objects that are assigned a reference number and stored in the shared object table."""
-	
-	number: int
-	
-	def __init__(self, number: int) -> None:
-		super().__init__()
-		
-		self.number = number
-	
-	def __repr__(self) -> str:
-		return f"<{type(self).__module__}.{type(self).__qualname__} #{self.number!r} at {id(self):#x}>"
-
-
-class CString(ReferenceNumberedObject):
+class CString(object):
 	"""Information about a C string as it is stored in a typedstream.
 	
 	This is a thin wrapper around a plain :class:`bytes` object.
@@ -423,86 +358,200 @@ class CString(ReferenceNumberedObject):
 	
 	contents: bytes
 	
-	def __init__(self, number: int, contents: bytes) -> None:
-		super().__init__(number)
+	def __init__(self, contents: bytes) -> None:
+		super().__init__()
 		
 		self.contents = contents
 	
 	def __repr__(self) -> str:
-		return f"{type(self).__module__}.{type(self).__qualname__}(number={self.number!r}, contents={self.contents!r})"
+		return f"{type(self).__module__}.{type(self).__qualname__}({self.contents!r})"
 	
 	def __str__(self) -> str:
-		return f"(#{self.number}) {self.contents!r}"
+		return f"C string: {self.contents!r}"
 
 
-class Class(ReferenceNumberedObject, AsMultilineStringBase):
-	"""Information about a class as it is stored at the start of objects in a typedstream."""
+class SingleClass(object):
+	"""Information about a class (name and version),
+	stored literally in a chain of superclasses in a typedstream.
+	
+	A class in a typedstream can be stored literally, as a reference, or be ``Nil``.
+	A literally stored class is always followed by information about its superclass.
+	If the superclass information is also stored literally,
+	it is again followed by information about its superclass.
+	This chain continues until a class is reached that has been stored before
+	(in which case it is stored as a reference)
+	or a root class is reached
+	(in which case the superclass is ``Nil``).
+	
+	The beginning and end of such a chain of superclasses are not marked explicitly in a typedstream,
+	and no events are generated when a superclass chain begins or ends.
+	A superclass chain begins implicitly when a literally stored class is encountered
+	(if no chain is already in progress),
+	and the chain ends after the first non-literal (i. e. reference or ``Nil``) class.
+	"""
 	
 	name: bytes
 	version: int
-	superclass: typing.Optional[typing.Union["Class", ObjectReference["Class"]]]
 	
-	def __init__(self, number: int, name: bytes, version: int, superclass: typing.Optional[typing.Union["Class", ObjectReference["Class"]]]) -> None:
-		super().__init__(number)
+	def __init__(self, name: bytes, version: int) -> None:
+		super().__init__()
 		
 		self.name = name
 		self.version = version
-		self.superclass = superclass
 	
 	def __repr__(self) -> str:
-		return f"{type(self).__module__}.{type(self).__qualname__}(number={self.number!r}, name={self.name!r}, version={self.version!r}, superclass={self.superclass!r})"
+		return f"{type(self).__module__}.{type(self).__qualname__}(name={self.name!r}, version={self.version})"
 	
-	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
-		rep = f"(#{self.number}) {self.name.decode('ascii', errors='backslashreplace')} v{self.version}"
-		if id(self) in state.currently_rendering_ids:
-			rep += ", ... (cycle in superclass chain)"
-			yield rep
-		elif self.superclass is not None:
-			superclass_it = iter(as_multiline_string(self.superclass, calling_self=self, state=state))
-			rep += f", extends {next(superclass_it)}"
-			yield rep
-			yield from superclass_it
-		else:
-			yield rep
+	def __str__(self) -> str:
+		return f"class {self.name.decode('ascii', errors='backslashreplace')} v{self.version}"
 
 
-# Placeholder value for class fields that have not been initialized yet.
-# This is needed because classes and objects have to be inserted into the shared_object_table
-# before their superclass/class fields can be set.
-CLASS_NOT_SET_YET = Class(-1, b"<placeholder - class has not been read/set yet>", -1, None)
-
-
-class Object(ReferenceNumberedObject, AsMultilineStringBase):
-	"""Representation of an object as it is stored in a typedstream."""
+class BeginObject(object):
+	"""Marks the beginning of a literally stored object.
 	
-	clazz: typing.Union[Class, ObjectReference[Class]]
-	contents: typing.List[TypedValue[typing.Any]]
+	This event is followed by information about the object's class,
+	stored as a chain of class information (see :class:`SingleClass`).
+	This class chain is followed by an arbitrary number of type-prefixed value groups,
+	which represent the object's contents.
+	The object ends when an :class:`EndObject` is encountered where the next value group would start.
+	"""
 	
-	def __init__(self, number: int, clazz: typing.Union[Class, ObjectReference[Class]], contents: typing.List[TypedValue[typing.Any]]) -> None:
-		super().__init__(number)
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}()"
+	
+	def __str__(self) -> str:
+		return "begin literal object"
+
+
+class EndObject(object):
+	"""Marks the end of a literally stored object."""
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}()"
+	
+	def __str__(self) -> str:
+		return "end literal object"
+
+
+class ByteArray(object):
+	"""Represents an array of bytes (signed or unsigned char).
+	
+	For performance and simplicity,
+	such arrays are read all at once and represented as a single event,
+	instead of generating one event per element as for other array element types.
+	"""
+	
+	element_encoding: bytes
+	data: bytes
+	
+	def __init__(self, element_encoding: bytes, data: bytes) -> None:
+		super().__init__()
 		
-		self.clazz = clazz
-		self.contents = contents
+		self.element_encoding = element_encoding
+		self.data = data
 	
 	def __repr__(self) -> str:
-		return f"{type(self).__module__}.{type(self).__qualname__}(number={self.number!r}, clazz={self.clazz!r}, contents={self.contents!r})"
+		return f"{type(self).__module__}.{type(self).__qualname__}(element_encoding={self.element_encoding!r}, data={self.data!r})"
 	
-	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
-		first = f"object (#{self.number}) of class {self.clazz}"
-		if id(self) in state.currently_rendering_ids:
-			yield first + " (circular reference)"
-		elif id(self) in state.already_rendered_ids:
-			yield first + " (backreference)"
-		elif not self.contents:
-			yield first + ", no contents"
-		else:
-			yield first + ", contents:"
-			for value in self.contents:
-				for line in as_multiline_string(value, calling_self=self, state=state):
-					yield "\t" + line
+	def __str__(self) -> str:
+		return f"byte array (element type {self.element_encoding!r}): {self.data!r}"
 
 
-class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
+class BeginArray(object):
+	"""Marks the beginning of an array.
+	
+	This event is provided for convenience and doesn't directly correspond to data in the typedstream.
+	The array length and element type information provided in this event actually comes from the arrays's type encoding.
+	
+	This event is followed by the element values,
+	which are not explicitly type-prefixed,
+	as they all have the type specified in the array type encoding.
+	The end of the array is not marked in the typedstream data,
+	as it can be determined based on the length and element type,
+	but for convenience,
+	an :class:`EndArray` element is generated after the last array element.
+	
+	This event is *not* generated for arrays of bytes (signed or unsigned char) -
+	such arrays are represented as single :class:`ByteArray` events instead.
+	"""
+	
+	element_encoding: bytes
+	length: int
+	
+	def __init__(self, element_encoding: bytes, length: int) -> None:
+		super().__init__()
+		
+		self.element_encoding = element_encoding
+		self.length = length
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}(element_encoding={self.element_encoding!r}, length={self.length!r})"
+	
+	def __str__(self) -> str:
+		return f"begin array (element type {self.element_encoding!r}, length {self.length})"
+
+
+class EndArray(object):
+	"""Marks the end of an array.
+	
+	This event is provided for convenience and doesn't correspond to any data in the typedstream.
+	"""
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}()"
+	
+	def __str__(self) -> str:
+		return "end array"
+
+
+class BeginStruct(object):
+	"""Marks the beginning of a struct.
+	
+	This event is provided for convenience and doesn't directly correspond to data in the typedstream.
+	The struct name and field type information provided in this event actually comes from the struct's type encoding.
+	
+	This event is followed by the field values,
+	which are not explicitly type-prefixed (unlike in objects),
+	as their types are specified in the struct type encoding.
+	The end of the struct is not marked in the typedstream data,
+	as it can be determined based on the type information,
+	but for convenience,
+	an :class:`EndStruct` element is generated after the last struct field.
+	"""
+	
+	name: bytes
+	field_encodings: typing.Sequence[bytes]
+	
+	def __init__(self, name: bytes, field_encodings: typing.Sequence[bytes]) -> None:
+		super().__init__()
+		
+		self.name = name
+		self.field_encodings = field_encodings
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}(name={self.name!r}, field_encodings={self.field_encodings!r})"
+	
+	def __str__(self) -> str:
+		return f"begin struct {self.name.decode('ascii', errors='backslashreplace')} (field types {self.field_encodings!r})"
+
+
+class EndStruct(object):
+	"""Marks the end of a struct.
+	
+	This event is provided for convenience and doesn't correspond to any data in the typedstream.
+	"""
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}()"
+	
+	def __str__(self) -> str:
+		return "end struct"
+
+
+ReadEvent = typing.Optional[typing.Union[BeginTypedValues, EndTypedValues, int, float, ObjectReference, CString, Selector, bytes, SingleClass, BeginObject, EndObject, ByteArray, BeginArray, EndArray, BeginStruct, EndStruct]]
+
+
+class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Iterable[ReadEvent]):
 	"""Reads typedstream data from a raw byte stream."""
 	
 	_EOF_MESSAGE: typing.ClassVar[str] = "End of typedstream reached"
@@ -512,11 +561,12 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 	_stream: typing.BinaryIO
 	
 	shared_string_table: typing.List[bytes]
-	shared_object_table: typing.List[ReferenceNumberedObject]
 	
 	streamer_version: int
 	byte_order: str
 	system_version: int
+	
+	_events_iterator: typing.Iterator[ReadEvent]
 	
 	@classmethod
 	def open(cls, filename: typing.Union[str, bytes, os.PathLike], **kwargs: typing.Any) -> "TypedStreamReader":
@@ -550,10 +600,10 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		self._stream = stream
 		
 		self.shared_string_table = []
-		self.shared_object_table = []
 		
 		try:
 			self._read_header()
+			self._events_iterator = self._read_all_values()
 		except BaseException:
 			self.close()
 			raise
@@ -581,6 +631,9 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 	
 	def __repr__(self) -> str:
 		return f"<{type(self).__module__}.{type(self).__qualname__} at {id(self):#x}: streamer version {self.streamer_version}, byte order {self.byte_order}, system version {self.system_version}>"
+	
+	def __iter__(self) -> typing.Iterator[ReadEvent]:
+		return self._events_iterator
 	
 	def _debug(self, message: str) -> None:
 		"""If this reader has debugging enabled (i. e. ``debug=True`` was passed to the constructor),
@@ -770,26 +823,33 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug(f"\t~ {string!r}")
 			return string
 	
-	def _read_object_reference(self, referenced_type: typing.Type[_RNO], head: typing.Optional[int] = None) -> ObjectReference[_RNO]:
-		"""
+	def _read_object_reference(self, referenced_type: ObjectReference.Type, head: typing.Optional[int] = None) -> ObjectReference:
+		"""Read an object reference value.
 		
+		Despite the name,
+		object references can't just refer to objects,
+		but also to classes or C strings.
+		The type of object that a reference refers to is always clear from context
+		and is not explicitly stored in the typedstream.
+		
+		:param referenced_type: The type of object that the reference refers to.
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
 		:return: The read object reference.
 		"""
 		
-		self._debug(f"Reference to {referenced_type.__qualname__}")
+		self._debug(f"Reference to {referenced_type.value}")
 		reference_number = self._read_integer(head, signed=True)
 		self._debug(f"... number {reference_number}")
 		decoded = _decode_reference_number(reference_number)
 		self._debug(f"... decoded to {decoded}")
 		return ObjectReference(referenced_type, decoded)
 	
-	def _read_c_string(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[CString, ObjectReference[CString]]]:
+	def _read_c_string(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[CString, ObjectReference]]:
 		"""Read a C string value.
 		
 		A C string value may either be stored literally
 		or as a reference to a previous literally stored C string value.
-		Literal C string values are appended to the :attr:`shared_object_table` as they are being read.
+		Literal C string values are returned as :class:`CString` objects.
 		C string values stored as references are returned as :class:`ObjectReference` objects
 		and are not automatically dereferenced.
 		
@@ -812,43 +872,22 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			# and the reader does not handle them properly.
 			if 0 in string:
 				raise InvalidTypedStreamError("C string value cannot contain zero bytes")
-			cstring = CString(len(self.shared_object_table), string)
-			self._debug(f"\t... {cstring}")
-			self.shared_object_table.append(cstring)
-			return cstring
+			return CString(string)
 		else:
 			self._debug("\t... reference")
-			return self._read_object_reference(CString, head)
+			return self._read_object_reference(ObjectReference.Type.C_STRING, head)
 	
-	def _read_class(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[Class, ObjectReference[Class]]]:
-		"""Read a class object.
-		
-		Class objects are only found at the start of an object (indicating the object's class),
-		or at the end of another class object (indicating the class's superclass).
-		
-		A class object may either be stored literally
-		or as a reference to a previous literally stored class object.
-		Literal class objects are appended to the :attr:`shared_object_table` as they are being read.
-		Class objects stored as references are returned as :class:`ObjectReference` objects
-		and are not automatically dereferenced.
-		
-		Because of how the typedstream format expects references to be numbered,
-		classes are already added to :attr:`shared_object_table` before they are fully initialized.
-		Class objects in this state have their :attr:`~Class.superclass` attribute set to the special value :attr:`CLASS_NOT_SET_YET`.
-		This state usually isn't visible to callers though -
-		once the class object is returned,
-		it is fully initialized.
+	def _read_class(self, head: typing.Optional[int] = None) -> typing.Iterable[typing.Optional[typing.Union[SingleClass, ObjectReference]]]:
+		"""Iteratively read a class object from the typedstream.
 		
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
-		:return: The read class object or reference, which may be ``Nil``/``None``.
+		:return: An iterable of events representing the class object.
+			See :class:`SingleClass` for information about what events are generated when and what they mean.
 		"""
 		
 		self._debug("Class")
 		head = self._read_head_byte(head)
-		if head == TAG_NIL:
-			self._debug("\t... nil")
-			return None
-		elif head == TAG_NEW:
+		while head == TAG_NEW:
 			self._debug("\t... new")
 			name = self._read_shared_string()
 			if name is None:
@@ -856,102 +895,54 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			self._debug(f"\t... name {name!r}")
 			version = self._read_integer(signed=True)
 			self._debug(f"\t... version {version}")
-			clazz = Class(len(self.shared_object_table), name, version, CLASS_NOT_SET_YET)
-			self._debug(f"\t... {clazz}")
-			self.shared_object_table.append(clazz)
-			# This recurses until nil (no superclass) or a reference to a previous class is found.
-			superclass = self._read_class()
-			self._debug(f"\t... superclass {superclass}")
-			clazz.superclass = superclass
-			return clazz
+			yield SingleClass(name, version)
+			head = self._read_head_byte()
+		
+		if head == TAG_NIL:
+			self._debug("\t... nil")
+			yield None
 		else:
 			self._debug("\t... reference")
-			return self._read_object_reference(Class, head)
+			yield self._read_object_reference(ObjectReference.Type.CLASS, head)
 	
-	def _read_object_start(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[Object, ObjectReference[Object]]]:
-		"""Read the start of an object,
-		i. e. its class information.
-		
-		An object may either be stored literally
-		or as a reference to a previous literally stored object.
-		Literal objects are appended to the :attr:`shared_object_table` as they are being read.
-		Objects stored as references are returned as :class:`ObjectReference` objects
-		and are not automatically dereferenced.
-		
-		If the return value is an :class:`Object`,
-		the object is stored literally.
-		The caller is expected to read the object's data
-		that follows the start of the object
-		and store it in the object's :attr:`~Object.contents` attribute,
-		until the matching end of object tag is reached.
-		
-		If the return value is ``None`` or an :class:`ObjectReference`,
-		there is no following object data or end of object tag that need to be read by the caller.
-		
-		Because of how the typedstream format expects references to be numbered,
-		objects are already added to :attr:`shared_object_table` before they are fully initialized.
-		Objects in this state have their :attr:`~Object.clazz` attribute set to the special value :attr:`CLASS_NOT_SET_YET`.
-		This state usually isn't visible to callers though -
-		once the object is returned,
-		it is fully initialized.
+	def _read_object(self, head: typing.Optional[int] = None) -> typing.Iterable[ReadEvent]:
+		"""Iteratively read an object from the typedstream,
+		including all of its contents and the end of object marker.
 		
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
-		:return: The read object or reference, which may be ``nil``/``None``.
+		:return: An iterable of events representing the object.
+			See :class:`BeginObject` and :class:`EndObject` for information about what events are generated when and what they mean.
 		"""
 		
 		self._debug("Object")
 		head = self._read_head_byte(head)
 		if head == TAG_NIL:
 			self._debug("\t... nil")
-			return None
+			yield None
 		elif head == TAG_NEW:
 			self._debug("\t... new")
-			obj = Object(len(self.shared_object_table), CLASS_NOT_SET_YET, [])
-			self._debug(f"\t... {obj}")
-			self.shared_object_table.append(obj)
-			clazz = self._read_class()
-			self._debug(f"\t... of class {clazz}")
-			if clazz is None:
-				raise InvalidTypedStreamError("Object class cannot be nil")
-			obj.clazz = clazz
-			return obj
-		else:
-			self._debug("\t... reference")
-			return self._read_object_reference(Object, head)
-	
-	def _read_object(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[Object, ObjectReference[Object]]]:
-		"""Read an entire object,
-		including its contents.
-		
-		An object may either be stored literally
-		or as a reference to a previous literally stored object.
-		Literal objects are returned as :class:`Object`s.
-		Objects stored as references are returned as :class:`ObjectReference` objects
-		and are not automatically dereferenced.
-		
-		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
-		:return: The read object or reference, which may be ``nil``/``None``.
-		"""
-		
-		obj = self._read_object_start(head)
-		if isinstance(obj, Object):
-			# Object is stored literally and is not nil or a reference,
-			# so read the contents until the end of the object is reached.
+			yield BeginObject()
+			yield from self._read_class()
 			next_head = self._read_head_byte()
 			while next_head != TAG_END_OF_OBJECT:
-				obj.contents.append(self.read_value(next_head))
+				yield from self._read_typed_values(next_head)
 				next_head = self._read_head_byte()
-		return obj
+			yield EndObject()
+		else:
+			self._debug("\t... reference")
+			yield self._read_object_reference(ObjectReference.Type.OBJECT, head)
 	
-	def _read_value_with_encoding(self, type_encoding: bytes, head: typing.Optional[int] = None) -> typing.Any:
-		"""Read a single value with the type indicated by the given type encoding.
+	def _read_value_with_encoding(self, type_encoding: bytes, head: typing.Optional[int] = None) -> typing.Iterable[ReadEvent]:
+		"""Iteratively read a single value with the type indicated by the given type encoding.
 		
 		The type encoding string must contain exactly one type
 		(although it may be a compound type like a struct or array).
 		Type encoding strings that might contain more than one value must first be split using :func:`_split_encodings`.
 		
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
-		:return: The read value, converted to a Python representation.
+		:return: An iterable of events representing the object.
+			Simple values are represented by single events,
+			but more complex values (classes, objects, arrays, structs) usually generate multiple events.
 		"""
 		
 		self._debug(f"Value with type encoding {type_encoding!r}")
@@ -960,27 +951,27 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 		# chars are always stored literally -
 		# the usual tags do not apply.
 		if type_encoding == b"C":
-			return int.from_bytes(self._read_exact(1), self.byte_order, signed=False)
+			yield int.from_bytes(self._read_exact(1), self.byte_order, signed=False)
 		elif type_encoding == b"c":
-			return int.from_bytes(self._read_exact(1), self.byte_order, signed=True)
+			yield int.from_bytes(self._read_exact(1), self.byte_order, signed=True)
 		elif type_encoding in b"SILQ":
-			return self._read_integer(head, signed=False)
+			yield self._read_integer(head, signed=False)
 		elif type_encoding in b"silq":
-			return self._read_integer(head, signed=True)
+			yield self._read_integer(head, signed=True)
 		elif type_encoding == b"f":
-			return self._read_float(head)
+			yield self._read_float(head)
 		elif type_encoding == b"d":
-			return self._read_double(head)
+			yield self._read_double(head)
 		elif type_encoding == b"*":
-			return self._read_c_string(head)
+			yield self._read_c_string(head)
 		elif type_encoding == b":":
-			return Selector(self._read_shared_string(head))
+			yield Selector(self._read_shared_string(head))
 		elif type_encoding == b"+":
-			return self._read_unshared_string(head)
+			yield self._read_unshared_string(head)
 		elif type_encoding == b"#":
-			return self._read_class(head)
+			yield from self._read_class(head)
 		elif type_encoding == b"@":
-			return self._read_object(head)
+			yield from self._read_object(head)
 		elif type_encoding.startswith(b"["):
 			if not type_encoding.endswith(b"]"):
 				raise InvalidTypedStreamError(f"Missing closing bracket in array type encoding {type_encoding!r}")
@@ -1001,9 +992,12 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			
 			if element_type_encoding in b"Cc":
 				# Special case for byte arrays for faster reading and a better parsed representation.
-				return self._read_exact(length)
+				yield ByteArray(element_type_encoding, self._read_exact(length))
 			else:
-				return [self._read_value_with_encoding(element_type_encoding) for _ in range(length)]
+				yield BeginArray(element_type_encoding, length)
+				for _ in range(length):
+					yield from self._read_value_with_encoding(element_type_encoding)
+				yield EndArray()
 		elif type_encoding.startswith(b"{"):
 			if not type_encoding.endswith(b"}"):
 				raise InvalidTypedStreamError(f"Missing closing brace in struct type encoding {type_encoding!r}")
@@ -1013,23 +1007,19 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			except ValueError:
 				raise InvalidTypedStreamError(f"Missing name in struct type encoding {type_encoding!r}")
 			
-			field_type_encodings = type_encoding[equals_pos+1:-1]
-			return Struct([
-				TypedValue(field_type_encoding, self._read_value_with_encoding(field_type_encoding))
-				for field_type_encoding in _split_encodings(field_type_encodings)
-			])
+			name = type_encoding[1:equals_pos]
+			field_type_encodings = list(_split_encodings(type_encoding[equals_pos+1:-1]))
+			yield BeginStruct(name, field_type_encodings)
+			for field_type_encoding in field_type_encodings:
+				yield from self._read_value_with_encoding(field_type_encoding)
+			yield EndStruct()
 		else:
 			raise InvalidTypedStreamError(f"Don't know how to read a value with type encoding {type_encoding!r}")
 	
-	def read_value(self, head: typing.Optional[int] = None, *, end_of_stream_ok: bool = False) -> TypedValue[typing.Any]:
-		"""Read the next typed value from the stream,
-		which may have any type (primitive or object).
+	def _read_typed_values(self, head: typing.Optional[int] = None, *, end_of_stream_ok: bool = False) -> typing.Iterable[ReadEvent]:
+		"""Iteratively read the next group of typed values from the stream.
 		
-		The type encoding string is decoded to determine the type of the following value,
-		which is then read and converted to a Python representation.
-		
-		If the type encoding string contains more than one type,
-		all of the corresponding values are read and returned as a :class:`Group`.
+		The type encoding string is decoded to determine the type of the following values.
 		
 		:param head: An already read head byte to use, or ``None`` if the head byte should be read from the stream.
 		:param end_of_stream_ok: Whether reaching the end of the data stream is an acceptable condition.
@@ -1040,7 +1030,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			(not right at the beginning),
 			the exception is always an :class:`InvalidTypedStreamError`,
 			regardless of the value of this parameter.
-		:return: The read value and its type encoding.
+		:return: An iterable of events representing the typed values.
+			See :class:`BeginTypedValues` and :class:`EndTypedValues` for information about what events are generated when and what they mean.
 		"""
 		
 		self._debug("Type encoding-prefixed value")
@@ -1053,121 +1044,32 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"]):
 			else:
 				raise
 		
-		encodings = self._read_shared_string(head)
-		if encodings is None:
+		encoding_string = self._read_shared_string(head)
+		if encoding_string is None:
 			raise InvalidTypedStreamError("Encountered nil type encoding string")
-		elif not encodings:
+		elif not encoding_string:
 			raise InvalidTypedStreamError("Encountered empty type encoding string")
 		
-		values = [
-			TypedValue(encoding, self._read_value_with_encoding(encoding))
-			for encoding in _split_encodings(encodings)
-		]
-		assert values
-		if len(values) == 1:
-			(value,) = values
-			assert value.encoding == encodings
-			return value
-		else:
-			return TypedValue(encodings, Group(values))
+		encodings = list(_split_encodings(encoding_string))
+		yield BeginTypedValues(encodings)
+		for encoding in encodings:
+			yield from self._read_value_with_encoding(encoding)
+		yield EndTypedValues()
 	
-	@property
-	def values(self) -> typing.Iterator[TypedValue[typing.Any]]:
-		"""Iterator over the typed values stored in the stream.
+	def _read_all_values(self) -> typing.Iterator[ReadEvent]:
+		"""Iteratively read all values in the typedstream.
 		
-		Iterating over :attr:`values` is equivalent to repeatedly calling :func:`read_value` until the end of the stream is reached.
+		:return: An iterable of events representing the contents of the typedstream.
+			Top-level values in a typedstream are always prefixed with a type encoding.
+			See :class:`BeginTypedValues` and :class:`EndTypedValues` for information about what events are generated when and what they mean.
 		"""
 		
 		while True:
 			try:
-				yield self.read_value(end_of_stream_ok=True)
+				yield from self._read_typed_values(end_of_stream_ok=True)
 			except EOFError as e:
 				# Make sure that the EOFError actually came from our code and not from some other IO code.
 				if tuple(e.args) == (type(self)._EOF_MESSAGE,):
 					return
 				else:
 					raise
-
-
-class ReferenceContext(object):
-	"""Context for resolving references in data read from a typedstream."""
-	
-	shared_object_table: typing.List[ReferenceNumberedObject]
-	do_not_resolve_types: typing.Container[typing.Type[ReferenceNumberedObject]]
-	
-	_already_visited_ids: typing.Set[int]
-	
-	def __init__(
-		self,
-		shared_object_table: typing.List[ReferenceNumberedObject],
-		*,
-		do_not_resolve_types: typing.Container[typing.Type[ReferenceNumberedObject]] = (),
-	) -> None:
-		super().__init__()
-		
-		self.shared_object_table = shared_object_table
-		self.do_not_resolve_types = do_not_resolve_types
-		
-		self._already_visited_ids = set()
-	
-	def resolve_references_inplace(self, value: typing.Any) -> typing.Any:
-		"""Recursively traverse the given data structure and resolve any references inside of it,
-		replacing them with the objects that they refer to.
-		
-		All references are resolved in-place,
-		i. e. the original data structure is modified.
-		This is necessary to support resolving circular/recursive references.
-		
-		:param value: The data structure in which to resolve references.
-			All types produced by :class:`TypedStreamReader` are supported.
-		:return: If ``value`` is an :class:`ObjectReference`,
-			the object that the reference refers to is returned.
-			Otherwise,
-			``value`` is returned
-			(as any references inside it have been resolved in-place).
-		"""
-		
-		if id(value) in self._already_visited_ids:
-			return value
-		elif isinstance(value, ObjectReference):
-			if value.referenced_type in self.do_not_resolve_types:
-				return value
-			
-			try:
-				referenced = self.shared_object_table[value.number]
-			except IndexError:
-				raise InvalidTypedStreamError(f"Object #{value.number} does not exist in shared object table (expected a {value.referenced_type})")
-			
-			if not isinstance(referenced, value.referenced_type):
-				raise InvalidTypedStreamError(f"Expected object #{value.number} to be a {value.referenced_type}, not {type(referenced)}")
-			
-			return referenced
-		elif isinstance(value, TypedValue):
-			value.value = self.resolve_references_inplace(value.value)
-			return value
-		elif isinstance(value, Group):
-			value.values = self.resolve_references_inplace(value.values)
-			return value
-		elif isinstance(value, Struct):
-			value.fields = self.resolve_references_inplace(value.fields)
-			return value
-		elif isinstance(value, Class):
-			if value is CLASS_NOT_SET_YET:
-				raise ValueError("Encountered unset class while resolving references")
-			
-			value.superclass = self.resolve_references_inplace(value.superclass)
-			return value
-		elif isinstance(value, Object):
-			value.clazz = self.resolve_references_inplace(value.clazz)
-			value.contents = self.resolve_references_inplace(value.contents)
-			return value
-		elif isinstance(value, list):
-			for i, v in enumerate(value):
-				value[i] = self.resolve_references_inplace(v)
-			return value
-		elif value is None or isinstance(value, (int, float, bytes, Selector, CString)):
-			# These values do not contain any references,
-			# so no further recursion is needed.
-			return value
-		else:
-			raise TypeError(f"Encountered an unexpected type while resolving references: {type(value)}")

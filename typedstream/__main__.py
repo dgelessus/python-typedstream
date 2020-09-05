@@ -65,7 +65,6 @@ NXTypedStream APIs in the older NeXTSTEP OS.
 Read and display the contents of a typedstream file.
 """,
 	)
-	sub_read.add_argument("--resolve-references", choices=["none", "no-objects", "all"], default="no-objects", help="What references to resolve: none, only classes and C strings but not objects (no-objects), or all. Warning: if the data contains circular object references, the all option will not work.")
 	sub_read.add_argument("file", type=argparse.FileType("rb"), help="The typedstream file to read.")
 	
 	ns = ap.parse_args()
@@ -77,24 +76,16 @@ Read and display the contents of a typedstream file.
 		with ns.file, api.TypedStreamReader(ns.file) as ts:
 			print(f"streamer version {ts.streamer_version}, byte order {ts.byte_order}, system version {ts.system_version}")
 			print()
-			values = list(ts.values)
-			shared_object_table = list(ts.shared_object_table)
-		
-		if ns.resolve_references == "none":
-			context = None
-		elif ns.resolve_references == "no-objects":
-			context = api.ReferenceContext(shared_object_table, do_not_resolve_types={api.Object})
-		elif ns.resolve_references == "all":
-			context = api.ReferenceContext(shared_object_table)
-		else:
-			raise AssertionError(f"Unhandled value for --resolve-references: {ns.resolve_references!r}")
-		
-		if context is not None:
-			values = context.resolve_references_inplace(values)
-		
-		for value in values:
-			for line in api.as_multiline_string(value):
-				print(line)
+			indent = 0
+			for event in ts:
+				if isinstance(event, (api.EndTypedValues, api.EndObject, api.EndArray, api.EndStruct)):
+					indent -= 1
+				
+				for line in api.as_multiline_string(event):
+					print(("\t" * indent) + line)
+				
+				if isinstance(event, (api.BeginTypedValues, api.BeginObject, api.BeginArray, api.BeginStruct)):
+					indent += 1
 		
 		sys.exit(0)
 	else:
