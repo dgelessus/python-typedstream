@@ -3,7 +3,7 @@ import sys
 import typing
 
 
-from . import __version__, advanced_repr, api
+from . import __version__, advanced_repr, stream
 
 
 def make_subcommand_parser(subs: typing.Any, name: str, *, help: str, description: str, **kwargs: typing.Any) -> argparse.ArgumentParser:
@@ -73,18 +73,18 @@ Read and display the contents of a typedstream file.
 		print("Missing subcommand", file=sys.stderr)
 		sys.exit(2)
 	elif ns.subcommand == "read":
-		with ns.file, api.TypedStreamReader(ns.file) as ts:
+		with ns.file, stream.TypedStreamReader(ns.file) as ts:
 			print(f"streamer version {ts.streamer_version}, byte order {ts.byte_order}, system version {ts.system_version}")
 			print()
 			indent = 0
 			for event in ts:
-				if isinstance(event, (api.EndTypedValues, api.EndObject, api.EndArray, api.EndStruct)):
+				if isinstance(event, (stream.EndTypedValues, stream.EndObject, stream.EndArray, stream.EndStruct)):
 					indent -= 1
 				
 				for line in advanced_repr.as_multiline_string(event):
 					print(("\t" * indent) + line)
 				
-				if isinstance(event, (api.BeginTypedValues, api.BeginObject, api.BeginArray, api.BeginStruct)):
+				if isinstance(event, (stream.BeginTypedValues, stream.BeginObject, stream.BeginArray, stream.BeginStruct)):
 					indent += 1
 		
 		sys.exit(0)
