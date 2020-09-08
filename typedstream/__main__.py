@@ -3,7 +3,7 @@ import sys
 import typing
 
 
-from . import __version__, api
+from . import __version__, advanced_repr, api
 
 
 def make_subcommand_parser(subs: typing.Any, name: str, *, help: str, description: str, **kwargs: typing.Any) -> argparse.ArgumentParser:
@@ -81,7 +81,7 @@ Read and display the contents of a typedstream file.
 				if isinstance(event, (api.EndTypedValues, api.EndObject, api.EndArray, api.EndStruct)):
 					indent -= 1
 				
-				for line in api.as_multiline_string(event):
+				for line in advanced_repr.as_multiline_string(event):
 					print(("\t" * indent) + line)
 				
 				if isinstance(event, (api.BeginTypedValues, api.BeginObject, api.BeginArray, api.BeginStruct)):
