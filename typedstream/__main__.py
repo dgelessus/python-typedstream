@@ -27,6 +27,29 @@ def make_subcommand_parser(subs: typing.Any, name: str, *, help: str, descriptio
 	return ap
 
 
+def dump_typedstream(ts: stream.TypedStreamReader) -> typing.Iterable[str]:
+	yield f"streamer version {ts.streamer_version}, byte order {ts.byte_order}, system version {ts.system_version}"
+	yield ""
+	indent = 0
+	for event in ts:
+		if isinstance(event, (stream.EndTypedValues, stream.EndObject, stream.EndArray, stream.EndStruct)):
+			indent -= 1
+		
+		for line in advanced_repr.as_multiline_string(event):
+			yield ("\t" * indent) + line
+		
+		if isinstance(event, (stream.BeginTypedValues, stream.BeginObject, stream.BeginArray, stream.BeginStruct)):
+			indent += 1
+
+
+def do_read(ns: argparse.Namespace) -> typing.NoReturn:
+	with ns.file, stream.TypedStreamReader(ns.file) as ts:
+		for line in dump_typedstream(ts):
+			print(line)
+	
+	sys.exit(0)
+
+
 def main() -> typing.NoReturn:
 	"""Main function of the CLI.
 	
@@ -73,21 +96,7 @@ Read and display the contents of a typedstream file.
 		print("Missing subcommand", file=sys.stderr)
 		sys.exit(2)
 	elif ns.subcommand == "read":
-		with ns.file, stream.TypedStreamReader(ns.file) as ts:
-			print(f"streamer version {ts.streamer_version}, byte order {ts.byte_order}, system version {ts.system_version}")
-			print()
-			indent = 0
-			for event in ts:
-				if isinstance(event, (stream.EndTypedValues, stream.EndObject, stream.EndArray, stream.EndStruct)):
-					indent -= 1
-				
-				for line in advanced_repr.as_multiline_string(event):
-					print(("\t" * indent) + line)
-				
-				if isinstance(event, (stream.BeginTypedValues, stream.BeginObject, stream.BeginArray, stream.BeginStruct)):
-					indent += 1
-		
-		sys.exit(0)
+		do_read(ns)
 	else:
 		print(f"Unknown subcommand: {ns.subcommand!r}", file=sys.stderr)
 		sys.exit(2)
