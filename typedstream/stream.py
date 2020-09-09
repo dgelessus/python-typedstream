@@ -437,7 +437,7 @@ class EndStruct(object):
 ReadEvent = typing.Optional[typing.Union[BeginTypedValues, EndTypedValues, int, float, ObjectReference, CString, Selector, bytes, SingleClass, BeginObject, EndObject, ByteArray, BeginArray, EndArray, BeginStruct, EndStruct]]
 
 
-class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Iterable[ReadEvent]):
+class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Iterator[ReadEvent]):
 	"""Reads typedstream data from a raw byte stream."""
 	
 	_EOF_MESSAGE: typing.ClassVar[str] = "End of typedstream reached"
@@ -519,7 +519,10 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		return f"<{type(self).__module__}.{type(self).__qualname__} at {id(self):#x}: streamer version {self.streamer_version}, byte order {self.byte_order}, system version {self.system_version}>"
 	
 	def __iter__(self) -> typing.Iterator[ReadEvent]:
-		return self._events_iterator
+		return self
+	
+	def __next__(self) -> ReadEvent:
+		return next(self._events_iterator)
 	
 	def _debug(self, message: str) -> None:
 		"""If this reader has debugging enabled (i. e. ``debug=True`` was passed to the constructor),
