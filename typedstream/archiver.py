@@ -131,7 +131,7 @@ class Unarchiver(object):
 	def decode_any_untyped_value(self) -> typing.Any:
 		first = next(self.reader)
 		
-		if first is None or isinstance(first, (int, float, stream.Selector, bytes)):
+		if first is None or isinstance(first, (int, float, bytes)):
 			return first
 		elif isinstance(first, stream.ObjectReference):
 			return self._lookup_reference(first)
@@ -169,7 +169,7 @@ class Unarchiver(object):
 			# So we iterate over the SingleClass events in reverse order,
 			# and store the Class objects in reverse order of construction,
 			# so that in the end new_classes matches the order stored in the stream.
-			new_classes = []
+			new_classes: typing.List[Class] = []
 			for single_class in reversed(single_classes):
 				next_superclass = Class(single_class.name, single_class.version, next_superclass)
 				new_classes.insert(0, next_superclass)
