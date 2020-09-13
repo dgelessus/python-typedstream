@@ -31,11 +31,16 @@ def dump_typedstream(ts: stream.TypedStreamReader) -> typing.Iterable[str]:
 	yield f"streamer version {ts.streamer_version}, byte order {ts.byte_order}, system version {ts.system_version}"
 	yield ""
 	indent = 0
+	next_object_number = 0
 	for event in ts:
 		if isinstance(event, (stream.EndTypedValues, stream.EndObject, stream.EndArray, stream.EndStruct)):
 			indent -= 1
 		
-		yield ("\t" * indent) + str(event)
+		rep = ("\t" * indent) + str(event)
+		if isinstance(event, (stream.CString, stream.SingleClass, stream.BeginObject)):
+			rep += f" (#{next_object_number})"
+			next_object_number += 1
+		yield rep
 		
 		if isinstance(event, (stream.BeginTypedValues, stream.BeginObject, stream.BeginArray, stream.BeginStruct)):
 			indent += 1
