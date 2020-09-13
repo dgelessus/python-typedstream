@@ -3,7 +3,7 @@ import sys
 import typing
 
 
-from . import __version__, advanced_repr, stream
+from . import __version__, stream
 
 
 def make_subcommand_parser(subs: typing.Any, name: str, *, help: str, description: str, **kwargs: typing.Any) -> argparse.ArgumentParser:
@@ -35,8 +35,7 @@ def dump_typedstream(ts: stream.TypedStreamReader) -> typing.Iterable[str]:
 		if isinstance(event, (stream.EndTypedValues, stream.EndObject, stream.EndArray, stream.EndStruct)):
 			indent -= 1
 		
-		for line in advanced_repr.as_multiline_string(event):
-			yield ("\t" * indent) + line
+		yield ("\t" * indent) + str(event)
 		
 		if isinstance(event, (stream.BeginTypedValues, stream.BeginObject, stream.BeginArray, stream.BeginStruct)):
 			indent += 1
