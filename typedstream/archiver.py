@@ -95,11 +95,39 @@ class KnownArchivedObject(metaclass=abc.ABCMeta):
 	archived_name: typing.ClassVar[bytes]
 	
 	def _init_from_unarchiver_(self, unarchiver: "Unarchiver", archived_class: Class) -> None:
+		"""Initialize ``self`` by reading archived data from a typedstream.
+		
+		Implementations of this method should only read data belonging to the class itself.
+		They shouldn't read any data belonging to the class's superclasses (if any),
+		and they shouldn't manually call the superclass's :func:`_init_from_unarchiver_` implementation.
+		The internals of :class:`Unarchiver` (or :func:`register_archived_class` to be exact)
+		ensure that all classes in the superclass chain have their :func:`_init_from_unarchiver_` implementations called,
+		with the appropriate arguments and in the correct order
+		(superclasses before their subclasses).
+		
+		:param unarchiver: The unarchiver from which to read archived data.
+		:param archived_class: Information about the current class,
+			as stored in the typedstream.
+			Implementations of this method should check the :attr:`~Class.version` attribute in particular,
+			to determine what structure the object data will have,
+			and should raise an exception if the version number is not supported.
+			The rest of the class information (name and superclass)
+			has already been checked automatically by the time that this method is called,
+			so this information doesn't need to be checked manually by implementations.
+		"""
+		
 		raise NotImplementedError()
 	
-	def check_archived_class_name(self, python_class: typing.Type["KnownArchivedObject"], archived_class: Class) -> None:
-		if archived_class.name != python_class.archived_name:
-			raise ValueError(f"Expected archived class {python_class.archived_name!r}, but got {archived_class.name!r} in stream")
+	# An override of init_from_unarchiver is defined by register_archived_class on each registered subclass.
+	# It can also be overridden manually in subclasses,
+	# in case the default implementation isn't suitable,
+	# for example if there is archived data belonging to the subclass before that belonging to the superclasses.
+	# In that case the implementation needs to manually perform all checks that would be performed by the automatic implementation,
+	# like checking the superclass name in the archived class information.
+	def init_from_unarchiver(self, unarchiver: "Unarchiver", archived_class: Class) -> None:
+		# Raise something other than NotImplementedError - this method normally doesn't need to be implemented manually by the user.
+		# (PyCharm for example warns when a subclass doesn't override a method that raises NotImplementedError.)
+		raise AssertionError("This implementation should never be called. It should have been overridden automatically by register_archived_class.")
 
 
 archived_classes_by_name: typing.Dict[bytes, typing.Type[KnownArchivedObject]] = {}
@@ -112,6 +140,47 @@ def register_archived_class(python_class: typing.Type[KnownArchivedObject]) -> N
 	# even archived_name on the class itself hasn't been set manually.
 	if "archived_name" not in python_class.__dict__:
 		python_class.archived_name = python_class.__name__.encode("ascii")
+	
+	# Ditto for init_from_unarchiver.
+	if "init_from_unarchiver" not in python_class.__dict__:
+		python_base_class_unchecked = python_class.__bases__[0]
+		if not issubclass(python_base_class_unchecked, KnownArchivedObject):
+			raise TypeError(f"The first base class of an archived class must be KnownArchivedObject or a subclass of it (found {python_base_class_unchecked})")
+		
+		# Workaround for https://github.com/python/mypy/issues/2608 -
+		# the check above narrows the type of python_base_class_unchecked,
+		# but mypy doesn't pass the narrowed type into closures.
+		# So as a workaround assign the type-narrowed value to a new variable,
+		# which always has the specific type and isn't narrowed using a check,
+		# so mypy recognizes its type inside the closure as well.
+		python_base_class = python_base_class_unchecked
+		
+		# Provide a default init_from_unarchiver implementation
+		# that checks that the superclass in the archived class information matches the one in Python,
+		# calls init_from_unarchiver in the superclass (if there is one),
+		# and finally calls the class's own _init_from_unarchiver_ implementation.
+		def init_from_unarchiver(self: KnownArchivedObject, unarchiver: Unarchiver, archived_class: Class) -> None:
+			if python_base_class == KnownArchivedObject:
+				# This is the root class (for archiving purposes) in the Python hierarchy.
+				# Ensure that the same is true for the archived class.
+				if archived_class.superclass is not None:
+					raise ValueError(f"Class {archived_class.name!r} should have no superclass, but unexpectedly has one in the typedstream: {archived_class}")
+			else:
+				# This class has a superclass (for archiving purposes) in the Python hierarchy.
+				# Ensure that the archived class also has one and that the names match.
+				if archived_class.superclass is None:
+					raise ValueError(f"Class {archived_class.name!r} should have superclass {python_base_class.archived_name!r}, but has no superclass in the typedstream")
+				elif archived_class.superclass.name != python_base_class.archived_name:
+					raise ValueError(f"Class {archived_class.name!r} should have superclass {python_base_class.archived_name!r}, but has a different superclass in the typedstream: {archived_class}")
+				
+				python_base_class.init_from_unarchiver(self, unarchiver, archived_class.superclass)
+			
+			python_class._init_from_unarchiver_(self, unarchiver, archived_class)
+		
+		# PyCharm doesn't understand that type: ignore comments can go anywhere,
+		# unlike normal type declaration comments.
+		# noinspection PyTypeHints
+		python_class.init_from_unarchiver = init_from_unarchiver # type: ignore # mypy doesn't want you to assign to methods (it's fine here, our replacement has an identical signature)
 	
 	archived_classes_by_name[python_class.archived_name] = python_class
 
@@ -256,7 +325,7 @@ class Unarchiver(object):
 					obj.contents.append(self.decode_typed_values(_lookahead=next_event))
 					next_event = next(self.reader)
 			else:
-				obj._init_from_unarchiver_(self, archived_class)
+				obj.init_from_unarchiver(self, archived_class)
 				end = next(self.reader)
 				if not isinstance(end, stream.EndObject):
 					raise ValueError(f"Expected EndObject, not {type(end)}")

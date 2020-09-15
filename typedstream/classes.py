@@ -4,8 +4,6 @@ from . import archiver
 @archiver.archived_class
 class NSObject(archiver.KnownArchivedObject):
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, archived_class: archiver.Class) -> None:
-		self.check_archived_class_name(__class__, archived_class)
-		
 		if archived_class.version != 0:
 			raise ValueError(f"Unsupported version: {archived_class.version}")
 
@@ -15,9 +13,6 @@ class NSData(NSObject):
 	data: bytes
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, archived_class: archiver.Class) -> None:
-		super()._init_from_unarchiver_(unarchiver, archived_class.superclass)
-		self.check_archived_class_name(__class__, archived_class)
-		
 		if archived_class.version == 0:
 			length = unarchiver.decode_typed_values(b"i")
 			self.data = unarchiver.decode_typed_values(f"[{length}c]".encode("ascii"))
@@ -31,9 +26,6 @@ class NSData(NSObject):
 @archiver.archived_class
 class NSMutableData(NSData):
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, archived_class: archiver.Class) -> None:
-		super()._init_from_unarchiver_(unarchiver, archived_class.superclass)
-		self.check_archived_class_name(__class__, archived_class)
-		
 		if archived_class.version != 0:
 			raise ValueError(f"Unsupported version: {archived_class.version}")
 
@@ -43,9 +35,6 @@ class NSString(NSObject):
 	value: str
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, archived_class: archiver.Class) -> None:
-		super()._init_from_unarchiver_(unarchiver, archived_class.superclass)
-		self.check_archived_class_name(__class__, archived_class)
-		
 		if archived_class.version == 1:
 			self.value = unarchiver.decode_typed_values(b"+").decode("utf-8")
 		else:
@@ -58,8 +47,5 @@ class NSString(NSObject):
 @archiver.archived_class
 class NSMutableString(NSString):
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, archived_class: archiver.Class) -> None:
-		super()._init_from_unarchiver_(unarchiver, archived_class.superclass)
-		self.check_archived_class_name(__class__, archived_class)
-		
 		if archived_class.version != 1:
 			raise ValueError(f"Unsupported version: {archived_class.version}")
