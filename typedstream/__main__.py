@@ -3,7 +3,10 @@ import sys
 import typing
 
 
-from . import __version__, stream
+from . import __version__
+from . import advanced_repr
+from . import archiver
+from . import stream
 
 
 def make_subcommand_parser(subs: typing.Any, name: str, *, help: str, description: str, **kwargs: typing.Any) -> argparse.ArgumentParser:
@@ -61,6 +64,20 @@ def do_read(ns: argparse.Namespace) -> typing.NoReturn:
 	sys.exit(0)
 
 
+def dump_decoded_typedstream(ts: stream.TypedStreamReader) -> typing.Iterable[str]:
+	unarchiver = archiver.Unarchiver(ts)
+	for obj in unarchiver.decode_all():
+		yield from advanced_repr.as_multiline_string(obj)
+
+
+def do_decode(ns: argparse.Namespace) -> typing.NoReturn:
+	with open_typedstream_file(ns.file) as ts:
+		for line in dump_decoded_typedstream(ts):
+			print(line)
+	
+	sys.exit(0)
+
+
 def main() -> typing.NoReturn:
 	"""Main function of the CLI.
 	
@@ -94,12 +111,39 @@ NXTypedStream APIs in the older NeXTSTEP OS.
 	sub_read = make_subcommand_parser(
 		subs,
 		"read",
-		help="Read and display the contents of a typedstream file.",
+		help="Read and display the raw contents of a typedstream.",
 		description="""
-Read and display the contents of a typedstream file.
+Read and display the raw contents of a typedstream.
+
+All information is displayed as it's stored in the typedstream and is processed
+as little as possible. In particular, object references are not resolved
+(although each object's reference number is displayed, so that the references
+can be followed manually), and objects aren't handled differently based on
+their class.
 """,
 	)
 	sub_read.add_argument("file", help="The typedstream file to read, or - for stdin.")
+	
+	sub_decode = make_subcommand_parser(
+		subs,
+		"decode",
+		help="Read, decode and display the contents of a typedstream.",
+		description="""
+Read, decode and display the contents of a typedstream.
+
+Where possible, the data read from the typedstream is decoded into a
+higher-level structure before being displayed. Objects are decoded based on
+their class when their format is known and implemented. Objects of unknown
+classes are also supported, but are decoded to a generic format based on the
+typedstream data.
+
+As a result of this decoding, some low-level information from the typedstream
+is discarded and not displayed, such as object reference numbers and raw type
+encoding strings. To see this low-level information, use the read subcommand
+instead.
+""",
+	)
+	sub_decode.add_argument("file", help="The typedstream file to read, or - for stdin.")
 	
 	ns = ap.parse_args()
 	
@@ -108,6 +152,8 @@ Read and display the contents of a typedstream file.
 		sys.exit(2)
 	elif ns.subcommand == "read":
 		do_read(ns)
+	elif ns.subcommand == "decode":
+		do_decode(ns)
 	else:
 		print(f"Unknown subcommand: {ns.subcommand!r}", file=sys.stderr)
 		sys.exit(2)
