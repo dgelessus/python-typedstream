@@ -1,3 +1,4 @@
+import abc
 import typing
 
 from . import advanced_repr
@@ -55,8 +56,12 @@ class Class(object):
 		return rep
 
 
-class Object(advanced_repr.AsMultilineStringBase):
-	"""Representation of an object as it is stored in a typedstream."""
+class GenericArchivedObject(advanced_repr.AsMultilineStringBase):
+	"""Representation of a generic object as it is stored in a typedstream.
+	
+	This class is only used for archived objects whose class is not known.
+	Objects of known classes are represented as instances of custom Python classes instead.
+	"""
 	
 	clazz: Class
 	contents: typing.List[typing.Any]
@@ -83,6 +88,40 @@ class Object(advanced_repr.AsMultilineStringBase):
 			for value in self.contents:
 				for line in advanced_repr.as_multiline_string(value, calling_self=self, state=state):
 					yield "\t" + line
+
+
+class KnownArchivedObject(metaclass=abc.ABCMeta):
+	# archived_name is set by register_archived_class on each registered subclass.
+	archived_name: typing.ClassVar[bytes]
+	
+	def _init_from_unarchiver_(self, unarchiver: "Unarchiver", archived_class: Class) -> None:
+		raise NotImplementedError()
+	
+	def check_archived_class_name(self, python_class: typing.Type["KnownArchivedObject"], archived_class: Class) -> None:
+		if archived_class.name != python_class.archived_name:
+			raise ValueError(f"Expected archived class {python_class.archived_name!r}, but got {archived_class.name!r} in stream")
+
+
+archived_classes_by_name: typing.Dict[bytes, typing.Type[KnownArchivedObject]] = {}
+
+
+def register_archived_class(python_class: typing.Type[KnownArchivedObject]) -> None:
+	# Set archived_name only if it hasn't already been set manually.
+	# Have to check directly in __dict__ instead of with try/except AttributeError or hasattr,
+	# because otherwise the archived_name from superclasses would be detected
+	# even archived_name on the class itself hasn't been set manually.
+	if "archived_name" not in python_class.__dict__:
+		python_class.archived_name = python_class.__name__.encode("ascii")
+	
+	archived_classes_by_name[python_class.archived_name] = python_class
+
+
+_KAO = typing.TypeVar("_KAO", bound=KnownArchivedObject)
+
+
+def archived_class(python_class: typing.Type[_KAO]) -> typing.Type[_KAO]:
+	register_archived_class(python_class)
+	return python_class
 
 
 class Struct(advanced_repr.AsMultilineStringBase):
@@ -191,20 +230,36 @@ class Unarchiver(object):
 			placeholder_index = len(self.shared_object_table)
 			self.shared_object_table.append((stream.ObjectReference.Type.OBJECT, None))
 			
-			obj_class = self.decode_any_untyped_value()
-			if not isinstance(obj_class, Class):
-				raise ValueError(f"Object class must be a Class, not {type(obj_class)}")
+			archived_class = self.decode_any_untyped_value()
+			if not isinstance(archived_class, Class):
+				raise ValueError(f"Object class must be a Class, not {type(archived_class)}")
 			
-			# Now that the class is known,
-			# we can create the actual object,
-			# and replace the placeholder in the shared object table.
-			obj = Object(obj_class, [])
+			# Create the object.
+			# Try to look up a known custom Python class for the archived class and create an instance of it.
+			# If no custom class is known for the archived class,
+			# create a generic object instead.
+			obj: typing.Union[GenericArchivedObject, KnownArchivedObject]
+			try:
+				python_class = archived_classes_by_name[archived_class.name]
+			except KeyError:
+				obj = GenericArchivedObject(archived_class, [])
+			else:
+				obj = python_class()
+			
+			# Now that the object is created,
+			# replace the placeholder in the shared object table with the real object.
 			self.shared_object_table[placeholder_index] = (stream.ObjectReference.Type.OBJECT, obj)
 			
-			next_event = next(self.reader)
-			while not isinstance(next_event, stream.EndObject):
-				obj.contents.append(self.decode_typed_values(_lookahead=next_event))
+			if isinstance(obj, GenericArchivedObject):
 				next_event = next(self.reader)
+				while not isinstance(next_event, stream.EndObject):
+					obj.contents.append(self.decode_typed_values(_lookahead=next_event))
+					next_event = next(self.reader)
+			else:
+				obj._init_from_unarchiver_(self, archived_class)
+				end = next(self.reader)
+				if not isinstance(end, stream.EndObject):
+					raise ValueError(f"Expected EndObject, not {type(end)}")
 			
 			return obj
 		elif isinstance(first, stream.ByteArray):
@@ -228,7 +283,7 @@ class Unarchiver(object):
 		else:
 			raise ValueError(f"Unexpected event at beginning of untyped value: {type(first)}")
 	
-	def decode_typed_values(self, *, _lookahead: typing.Any = _NO_LOOKAHEAD) -> typing.Any:
+	def decode_typed_values(self, *expected_encodings: bytes, _lookahead: typing.Any = _NO_LOOKAHEAD) -> typing.Any:
 		if _lookahead is _NO_LOOKAHEAD:
 			begin = next(self.reader)
 		else:
@@ -236,6 +291,8 @@ class Unarchiver(object):
 		
 		if not isinstance(begin, stream.BeginTypedValues):
 			raise ValueError(f"Expected BeginTypedValues, not {type(begin)}")
+		elif expected_encodings and tuple(begin.encodings) != tuple(expected_encodings):
+			raise ValueError(f"Expected type encodings {expected_encodings}, but got type encodings {begin.encodings} in stream")
 		
 		if len(begin.encodings) == 1:
 			# Single typed values are quite common,
