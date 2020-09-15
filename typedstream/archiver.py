@@ -97,6 +97,10 @@ class KnownArchivedObject(metaclass=abc.ABCMeta):
 	def _init_from_unarchiver_(self, unarchiver: "Unarchiver", archived_class: Class) -> None:
 		"""Initialize ``self`` by reading archived data from a typedstream.
 		
+		This method must be implemented in *every* class that inherits (directly or indirectly) from KnownArchivedObject.
+		Inheriting the implementation of a superclass is not allowed.
+		This is to ensure that every class checks its version number.
+		
 		Implementations of this method should only read data belonging to the class itself.
 		They shouldn't read any data belonging to the class's superclasses (if any),
 		and they shouldn't manually call the superclass's :func:`_init_from_unarchiver_` implementation.
@@ -174,6 +178,15 @@ def register_archived_class(python_class: typing.Type[KnownArchivedObject]) -> N
 					raise ValueError(f"Class {archived_class.name!r} should have superclass {python_base_class.archived_name!r}, but has a different superclass in the typedstream: {archived_class}")
 				
 				python_base_class.init_from_unarchiver(self, unarchiver, archived_class.superclass)
+			
+			# Ensure that the class defines its own _init_from_unarchiver_
+			# and doesn't just inherit the superclass's implementation,
+			# because that would result in the superclass's implementation being called more than once.
+			# It also enforces that every class checks its own version number,
+			# even if it doesn't have any data other than that belonging to the superclass
+			# (because in another version it might have data of its own).
+			if "_init_from_unarchiver_" not in python_class.__dict__:
+				raise ValueError("Every KnownArchivedObject must define its own _init_from_unarchiver_ implementation - inheriting it from the superclass is not allowed")
 			
 			python_class._init_from_unarchiver_(self, unarchiver, archived_class)
 		
