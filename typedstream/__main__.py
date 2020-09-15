@@ -27,6 +27,13 @@ def make_subcommand_parser(subs: typing.Any, name: str, *, help: str, descriptio
 	return ap
 
 
+def open_typedstream_file(file: str) -> stream.TypedStreamReader:
+	if file == "-":
+		return stream.TypedStreamReader(sys.stdin.buffer)
+	else:
+		return stream.TypedStreamReader.open(file)
+
+
 def dump_typedstream(ts: stream.TypedStreamReader) -> typing.Iterable[str]:
 	yield f"streamer version {ts.streamer_version}, byte order {ts.byte_order}, system version {ts.system_version}"
 	yield ""
@@ -47,7 +54,7 @@ def dump_typedstream(ts: stream.TypedStreamReader) -> typing.Iterable[str]:
 
 
 def do_read(ns: argparse.Namespace) -> typing.NoReturn:
-	with ns.file, stream.TypedStreamReader(ns.file) as ts:
+	with open_typedstream_file(ns.file) as ts:
 		for line in dump_typedstream(ts):
 			print(line)
 	
@@ -92,7 +99,7 @@ NXTypedStream APIs in the older NeXTSTEP OS.
 Read and display the contents of a typedstream file.
 """,
 	)
-	sub_read.add_argument("file", type=argparse.FileType("rb"), help="The typedstream file to read.")
+	sub_read.add_argument("file", help="The typedstream file to read, or - for stdin.")
 	
 	ns = ap.parse_args()
 	
