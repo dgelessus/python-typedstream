@@ -95,7 +95,7 @@ class KnownArchivedObject(metaclass=abc.ABCMeta):
 	archived_name: typing.ClassVar[bytes]
 	
 	@abc.abstractmethod
-	def _init_from_unarchiver_(self, unarchiver: "Unarchiver", archived_class: Class) -> None:
+	def _init_from_unarchiver_(self, unarchiver: "Unarchiver", class_version: int) -> None:
 		"""Initialize ``self`` by reading archived data from a typedstream.
 		
 		This method must be implemented in *every* class that inherits (directly or indirectly) from KnownArchivedObject.
@@ -111,14 +111,12 @@ class KnownArchivedObject(metaclass=abc.ABCMeta):
 		(superclasses before their subclasses).
 		
 		:param unarchiver: The unarchiver from which to read archived data.
-		:param archived_class: Information about the current class,
-			as stored in the typedstream.
-			Implementations of this method should check the :attr:`~Class.version` attribute in particular,
-			to determine what structure the object data will have,
-			and should raise an exception if the version number is not supported.
-			The rest of the class information (name and superclass)
-			has already been checked automatically by the time that this method is called,
-			so this information doesn't need to be checked manually by implementations.
+		:param class_version: The version of the class that archived the data.
+			A change in the class version number normally indicates that the data format has changed,
+			so implementations should check that the version number has the expected value
+			(or one of multiple expected values,
+			if there are multiple known versions of the data format)
+			and raise an exception otherwise.
 		"""
 		
 		raise NotImplementedError()
@@ -189,7 +187,7 @@ def register_archived_class(python_class: typing.Type[KnownArchivedObject]) -> N
 			if "_init_from_unarchiver_" not in python_class.__dict__:
 				raise ValueError("Every KnownArchivedObject must define its own _init_from_unarchiver_ implementation - inheriting it from the superclass is not allowed")
 			
-			python_class._init_from_unarchiver_(self, unarchiver, archived_class)
+			python_class._init_from_unarchiver_(self, unarchiver, archived_class.version)
 		
 		# PyCharm doesn't understand that type: ignore comments can go anywhere,
 		# unlike normal type declaration comments.
