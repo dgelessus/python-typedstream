@@ -1,4 +1,5 @@
 import enum
+import io
 import os
 import struct
 import types
@@ -453,6 +454,22 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 	system_version: int
 	
 	_events_iterator: typing.Iterator[ReadEvent]
+	
+	@classmethod
+	def from_data(cls, data: bytes, **kwargs: typing.Any) -> "TypedStreamReader":
+		"""Create a reader for the given typedstream data.
+		
+		This function accepts the same keyword arguments as the normal :class:`TypedStreamReader` constructor,
+		except for ``close``.
+		When using :func:`TypedStreamReader.from_data`,
+		the underlying raw byte stream is created and managed automatically -
+		callers only need to manage (i. e. close) the :class:`TypedStreamReader`.
+		"""
+		
+		if "close" in kwargs:
+			raise TypeError("TypedStreamReader.from_data does not support the 'close' keyword argument")
+		
+		return cls(io.BytesIO(data), close=True, **kwargs)
 	
 	@classmethod
 	def open(cls, filename: typing.Union[str, bytes, os.PathLike], **kwargs: typing.Any) -> "TypedStreamReader":
