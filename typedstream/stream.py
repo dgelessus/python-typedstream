@@ -466,7 +466,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		"""
 		
 		if "close" in kwargs:
-			raise TypeError("ResourceFile.open does not support the 'close' keyword argument")
+			raise TypeError("TypedStreamReader.open does not support the 'close' keyword argument")
 		
 		return cls(open(filename, "rb"), close=True, **kwargs)
 	
