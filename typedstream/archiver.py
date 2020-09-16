@@ -94,6 +94,7 @@ class KnownArchivedObject(metaclass=abc.ABCMeta):
 	# archived_name is set by register_archived_class on each registered subclass.
 	archived_name: typing.ClassVar[bytes]
 	
+	@abc.abstractmethod
 	def _init_from_unarchiver_(self, unarchiver: "Unarchiver", archived_class: Class) -> None:
 		"""Initialize ``self`` by reading archived data from a typedstream.
 		
