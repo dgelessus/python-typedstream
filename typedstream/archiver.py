@@ -91,8 +91,69 @@ class GenericArchivedObject(advanced_repr.AsMultilineStringBase):
 
 
 class KnownArchivedObject(metaclass=abc.ABCMeta):
-	# archived_name is set by register_archived_class on each registered subclass.
+	# archived_name is set by __init_subclass__ on each subclass.
 	archived_name: typing.ClassVar[bytes]
+	
+	@classmethod
+	def __init_subclass__(cls) -> None:
+		super().__init_subclass__()
+		
+		# Set archived_name only if it hasn't already been set manually.
+		# Have to check directly in __dict__ instead of with try/except AttributeError or hasattr,
+		# because otherwise the archived_name from superclasses would be detected
+		# even archived_name on the class itself hasn't been set manually.
+		if "archived_name" not in cls.__dict__:
+			cls.archived_name = cls.__name__.encode("ascii")
+		
+		# Ditto for init_from_unarchiver.
+		if "init_from_unarchiver" not in cls.__dict__:
+			base_cls_unchecked = cls.__bases__[0]
+			if not issubclass(base_cls_unchecked, KnownArchivedObject):
+				raise TypeError(f"The first base class of an archived class must be KnownArchivedObject or a subclass of it (found {base_cls_unchecked})")
+			
+			# Workaround for https://github.com/python/mypy/issues/2608 -
+			# the check above narrows the type of base_cls_unchecked,
+			# but mypy doesn't pass the narrowed type into closures.
+			# So as a workaround assign the type-narrowed value to a new variable,
+			# which always has the specific type and isn't narrowed using a check,
+			# so mypy recognizes its type inside the closure as well.
+			base_cls = base_cls_unchecked
+			
+			# Provide a default init_from_unarchiver implementation
+			# that checks that the superclass in the archived class information matches the one in Python,
+			# calls init_from_unarchiver in the superclass (if there is one),
+			# and finally calls the class's own _init_from_unarchiver_ implementation.
+			def init_from_unarchiver(self: KnownArchivedObject, unarchiver: Unarchiver, archived_class: Class) -> None:
+				if base_cls == KnownArchivedObject:
+					# This is the root class (for archiving purposes) in the Python hierarchy.
+					# Ensure that the same is true for the archived class.
+					if archived_class.superclass is not None:
+						raise ValueError(f"Class {archived_class.name!r} should have no superclass, but unexpectedly has one in the typedstream: {archived_class}")
+				else:
+					# This class has a superclass (for archiving purposes) in the Python hierarchy.
+					# Ensure that the archived class also has one and that the names match.
+					if archived_class.superclass is None:
+						raise ValueError(f"Class {archived_class.name!r} should have superclass {base_cls.archived_name!r}, but has no superclass in the typedstream")
+					elif archived_class.superclass.name != base_cls.archived_name:
+						raise ValueError(f"Class {archived_class.name!r} should have superclass {base_cls.archived_name!r}, but has a different superclass in the typedstream: {archived_class}")
+					
+					base_cls.init_from_unarchiver(self, unarchiver, archived_class.superclass)
+				
+				# Ensure that the class defines its own _init_from_unarchiver_
+				# and doesn't just inherit the superclass's implementation,
+				# because that would result in the superclass's implementation being called more than once.
+				# It also enforces that every class checks its own version number,
+				# even if it doesn't have any data other than that belonging to the superclass
+				# (because in another version it might have data of its own).
+				if "_init_from_unarchiver_" not in cls.__dict__:
+					raise ValueError("Every KnownArchivedObject must define its own _init_from_unarchiver_ implementation - inheriting it from the superclass is not allowed")
+				
+				cls._init_from_unarchiver_(self, unarchiver, archived_class.version)
+			
+			# PyCharm doesn't understand that type: ignore comments can go anywhere,
+			# unlike normal type declaration comments.
+			# noinspection PyTypeHints
+			cls.init_from_unarchiver = init_from_unarchiver # type: ignore # mypy doesn't want you to assign to methods (it's fine here, our replacement has an identical signature)
 	
 	@abc.abstractmethod
 	def _init_from_unarchiver_(self, unarchiver: "Unarchiver", class_version: int) -> None:
@@ -105,7 +166,7 @@ class KnownArchivedObject(metaclass=abc.ABCMeta):
 		Implementations of this method should only read data belonging to the class itself.
 		They shouldn't read any data belonging to the class's superclasses (if any),
 		and they shouldn't manually call the superclass's :func:`_init_from_unarchiver_` implementation.
-		The internals of :class:`Unarchiver` (or :func:`register_archived_class` to be exact)
+		The internals of :class:`KnownArchivedObject`
 		ensure that all classes in the superclass chain have their :func:`_init_from_unarchiver_` implementations called,
 		with the appropriate arguments and in the correct order
 		(superclasses before their subclasses).
@@ -121,7 +182,7 @@ class KnownArchivedObject(metaclass=abc.ABCMeta):
 		
 		raise NotImplementedError()
 	
-	# An override of init_from_unarchiver is defined by register_archived_class on each registered subclass.
+	# An override of init_from_unarchiver is defined by __init_subclass__ on each subclass.
 	# It can also be overridden manually in subclasses,
 	# in case the default implementation isn't suitable,
 	# for example if there is archived data belonging to the subclass before that belonging to the superclasses.
@@ -130,70 +191,13 @@ class KnownArchivedObject(metaclass=abc.ABCMeta):
 	def init_from_unarchiver(self, unarchiver: "Unarchiver", archived_class: Class) -> None:
 		# Raise something other than NotImplementedError - this method normally doesn't need to be implemented manually by the user.
 		# (PyCharm for example warns when a subclass doesn't override a method that raises NotImplementedError.)
-		raise AssertionError("This implementation should never be called. It should have been overridden automatically by register_archived_class.")
+		raise AssertionError("This implementation should never be called. It should have been overridden automatically by __init_subclass__.")
 
 
 archived_classes_by_name: typing.Dict[bytes, typing.Type[KnownArchivedObject]] = {}
 
 
 def register_archived_class(python_class: typing.Type[KnownArchivedObject]) -> None:
-	# Set archived_name only if it hasn't already been set manually.
-	# Have to check directly in __dict__ instead of with try/except AttributeError or hasattr,
-	# because otherwise the archived_name from superclasses would be detected
-	# even archived_name on the class itself hasn't been set manually.
-	if "archived_name" not in python_class.__dict__:
-		python_class.archived_name = python_class.__name__.encode("ascii")
-	
-	# Ditto for init_from_unarchiver.
-	if "init_from_unarchiver" not in python_class.__dict__:
-		python_base_class_unchecked = python_class.__bases__[0]
-		if not issubclass(python_base_class_unchecked, KnownArchivedObject):
-			raise TypeError(f"The first base class of an archived class must be KnownArchivedObject or a subclass of it (found {python_base_class_unchecked})")
-		
-		# Workaround for https://github.com/python/mypy/issues/2608 -
-		# the check above narrows the type of python_base_class_unchecked,
-		# but mypy doesn't pass the narrowed type into closures.
-		# So as a workaround assign the type-narrowed value to a new variable,
-		# which always has the specific type and isn't narrowed using a check,
-		# so mypy recognizes its type inside the closure as well.
-		python_base_class = python_base_class_unchecked
-		
-		# Provide a default init_from_unarchiver implementation
-		# that checks that the superclass in the archived class information matches the one in Python,
-		# calls init_from_unarchiver in the superclass (if there is one),
-		# and finally calls the class's own _init_from_unarchiver_ implementation.
-		def init_from_unarchiver(self: KnownArchivedObject, unarchiver: Unarchiver, archived_class: Class) -> None:
-			if python_base_class == KnownArchivedObject:
-				# This is the root class (for archiving purposes) in the Python hierarchy.
-				# Ensure that the same is true for the archived class.
-				if archived_class.superclass is not None:
-					raise ValueError(f"Class {archived_class.name!r} should have no superclass, but unexpectedly has one in the typedstream: {archived_class}")
-			else:
-				# This class has a superclass (for archiving purposes) in the Python hierarchy.
-				# Ensure that the archived class also has one and that the names match.
-				if archived_class.superclass is None:
-					raise ValueError(f"Class {archived_class.name!r} should have superclass {python_base_class.archived_name!r}, but has no superclass in the typedstream")
-				elif archived_class.superclass.name != python_base_class.archived_name:
-					raise ValueError(f"Class {archived_class.name!r} should have superclass {python_base_class.archived_name!r}, but has a different superclass in the typedstream: {archived_class}")
-				
-				python_base_class.init_from_unarchiver(self, unarchiver, archived_class.superclass)
-			
-			# Ensure that the class defines its own _init_from_unarchiver_
-			# and doesn't just inherit the superclass's implementation,
-			# because that would result in the superclass's implementation being called more than once.
-			# It also enforces that every class checks its own version number,
-			# even if it doesn't have any data other than that belonging to the superclass
-			# (because in another version it might have data of its own).
-			if "_init_from_unarchiver_" not in python_class.__dict__:
-				raise ValueError("Every KnownArchivedObject must define its own _init_from_unarchiver_ implementation - inheriting it from the superclass is not allowed")
-			
-			python_class._init_from_unarchiver_(self, unarchiver, archived_class.version)
-		
-		# PyCharm doesn't understand that type: ignore comments can go anywhere,
-		# unlike normal type declaration comments.
-		# noinspection PyTypeHints
-		python_class.init_from_unarchiver = init_from_unarchiver # type: ignore # mypy doesn't want you to assign to methods (it's fine here, our replacement has an identical signature)
-	
 	archived_classes_by_name[python_class.archived_name] = python_class
 
 
