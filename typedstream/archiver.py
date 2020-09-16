@@ -2,6 +2,7 @@ import abc
 import typing
 
 from . import advanced_repr
+from . import encodings
 from . import stream
 
 
@@ -254,7 +255,7 @@ class Unarchiver(object):
 			raise ValueError(f"Object reference type mismatch: reference should point to an object of type {ref.referenced_type.value}, but the referenced object number {ref.number} has type {ref_type.value}")
 		return obj
 	
-	def decode_any_untyped_value(self) -> typing.Any:
+	def decode_any_untyped_value(self, expected_encoding: bytes) -> typing.Any:
 		first = next(self.reader)
 		
 		if first is None or isinstance(first, (int, float, bytes)):
@@ -317,7 +318,7 @@ class Unarchiver(object):
 			placeholder_index = len(self.shared_object_table)
 			self.shared_object_table.append((stream.ObjectReference.Type.OBJECT, None))
 			
-			archived_class = self.decode_any_untyped_value()
+			archived_class = self.decode_any_untyped_value(b"#")
 			if not isinstance(archived_class, Class):
 				raise ValueError(f"Object class must be a Class, not {type(archived_class)}")
 			
@@ -352,7 +353,8 @@ class Unarchiver(object):
 		elif isinstance(first, stream.ByteArray):
 			return first.data
 		elif isinstance(first, stream.BeginArray):
-			array = [self.decode_any_untyped_value() for _ in range(first.length)]
+			_, expected_element_encoding = encodings.parse_array_encoding(expected_encoding)
+			array = [self.decode_any_untyped_value(expected_element_encoding) for _ in range(first.length)]
 			
 			end = next(self.reader)
 			if not isinstance(end, stream.EndArray):
@@ -360,7 +362,8 @@ class Unarchiver(object):
 			
 			return array
 		elif isinstance(first, stream.BeginStruct):
-			fields = [self.decode_any_untyped_value() for _ in first.field_encodings]
+			_, expected_field_encodings = encodings.parse_struct_encoding(expected_encoding)
+			fields = [self.decode_any_untyped_value(expected) for expected in expected_field_encodings]
 			
 			end = next(self.reader)
 			if not isinstance(end, stream.EndStruct):
@@ -378,15 +381,21 @@ class Unarchiver(object):
 		
 		if not isinstance(begin, stream.BeginTypedValues):
 			raise ValueError(f"Expected BeginTypedValues, not {type(begin)}")
-		elif expected_encodings and tuple(begin.encodings) != tuple(expected_encodings):
-			raise ValueError(f"Expected type encodings {expected_encodings}, but got type encodings {begin.encodings} in stream")
+		
+		if expected_encodings:
+			if tuple(begin.encodings) != tuple(expected_encodings):
+				raise ValueError(f"Expected type encodings {expected_encodings}, but got type encodings {begin.encodings} in stream")
+		else:
+			# Needs to be converted to a tuple to make mypy happy
+			# (*args are implicitly typed as tuples).
+			expected_encodings = tuple(begin.encodings)
 		
 		if len(begin.encodings) == 1:
 			# Single typed values are quite common,
 			# so for convenience don't wrap them in a 1-element tuple.
-			ret = self.decode_any_untyped_value()
+			ret = self.decode_any_untyped_value(expected_encodings[0])
 		else:
-			ret = Group(self.decode_any_untyped_value() for _ in begin.encodings)
+			ret = Group(self.decode_any_untyped_value(expected) for expected in expected_encodings)
 		
 		end = next(self.reader)
 		if not isinstance(end, stream.EndTypedValues):
