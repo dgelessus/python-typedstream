@@ -6,6 +6,9 @@ import types
 import typing
 
 
+from . import encodings
+
+
 _FLOAT_STRUCTS_BY_BYTE_ORDER = {
 	"big": struct.Struct(">f"),
 	"little": struct.Struct("<f"),
@@ -96,67 +99,6 @@ def _decode_reference_number(encoded: int) -> int:
 
 class InvalidTypedStreamError(Exception):
 	"""Raised by :class:`TypedStreamReader` if the typedstream data is invalid or doesn't match the expected structure."""
-
-
-# Adapted from https://github.com/beeware/rubicon-objc/blob/v0.3.1/rubicon/objc/types.py#L127-L188
-# The type encoding syntax used in typedstreams is very similar,
-# but not identical,
-# to the one used by the Objective-C runtime.
-# Some features are not used/supported in typedstreams,
-# such as qualifiers, arbitrary pointers, object pointer class names, block pointers, etc.
-# Typedstreams also use some type encoding characters that are not used by the Objective-C runtime,
-# such as "+" for raw bytes and "%" for "atoms" (deduplicated/uniqued/interned C strings).
-def _end_of_encoding(encoding: bytes, start: int) -> int:
-	"""Find the end index of the encoding starting at index start.
-	
-	The encoding is not validated very extensively.
-	There are no guarantees what happens for invalid encodings;
-	an error may be raised,
-	or a bogus end index may be returned.
-	Callers are expected to check that the returned end index actually results in a valid encoding.
-	"""
-	
-	if start not in range(len(encoding)):
-		raise ValueError(f"Start index {start} not in range({len(encoding)})")
-	
-	paren_depth = 0
-	
-	i = start
-	while i < len(encoding):
-		c = encoding[i:i+1]
-		if c in b"([{":
-			# Opening parenthesis of some type, wait for a corresponding closing paren.
-			# This doesn't check that the parenthesis *types* match
-			# (only the *number* of closing parens has to match).
-			paren_depth += 1
-			i += 1
-		elif paren_depth > 0:
-			if c in b")]}":
-				# Closing parentheses of some type.
-				paren_depth -= 1
-			i += 1
-			if paren_depth == 0:
-				# Final closing parenthesis, end of this encoding.
-				return i
-		else:
-			# All other encodings consist of exactly one character.
-			return i + 1
-	
-	if paren_depth > 0:
-		raise ValueError(f"Incomplete encoding, missing {paren_depth} closing parentheses: {encoding!r}")
-	else:
-		raise ValueError(f"Incomplete encoding, reached end of string too early: {encoding!r}")
-
-
-# Adapted from https://github.com/beeware/rubicon-objc/blob/v0.3.1/rubicon/objc/types.py#L430-L450
-def _split_encodings(encodings: bytes) -> typing.Iterable[bytes]:
-	"""Split apart multiple type encodings contained in a single encoding string."""
-	
-	start = 0
-	while start < len(encodings):
-		end = _end_of_encoding(encodings, start)
-		yield encodings[start:end]
-		start = end
 
 
 class BeginTypedValues(object):
@@ -879,22 +821,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		elif type_encoding == b"@":
 			yield from self._read_object(head)
 		elif type_encoding.startswith(b"["):
-			if not type_encoding.endswith(b"]"):
-				raise InvalidTypedStreamError(f"Missing closing bracket in array type encoding {type_encoding!r}")
-			
-			i = 1
-			while i < len(type_encoding) - 1:
-				if type_encoding[i] not in b"0123456789":
-					break
-				i += 1
-			length_string, element_type_encoding = type_encoding[1:i], type_encoding[i:-1]
-			
-			if not length_string:
-				raise InvalidTypedStreamError(f"Missing length in array type encoding: {type_encoding!r}")
-			if not element_type_encoding:
-				raise InvalidTypedStreamError(f"Missing element type in array type encoding: {type_encoding!r}")
-			
-			length = int(length_string.decode("ascii"))
+			length, element_type_encoding = encodings.parse_array_encoding(type_encoding)
 			
 			if element_type_encoding in b"Cc":
 				# Special case for byte arrays for faster reading and a better parsed representation.
@@ -905,16 +832,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 					yield from self._read_value_with_encoding(element_type_encoding)
 				yield EndArray()
 		elif type_encoding.startswith(b"{"):
-			if not type_encoding.endswith(b"}"):
-				raise InvalidTypedStreamError(f"Missing closing brace in struct type encoding {type_encoding!r}")
-			
-			try:
-				equals_pos = type_encoding.index(b"=")
-			except ValueError:
-				raise InvalidTypedStreamError(f"Missing name in struct type encoding {type_encoding!r}")
-			
-			name = type_encoding[1:equals_pos]
-			field_type_encodings = list(_split_encodings(type_encoding[equals_pos+1:-1]))
+			name, field_type_encodings = encodings.parse_struct_encoding(type_encoding)
 			yield BeginStruct(name, field_type_encodings)
 			for field_type_encoding in field_type_encodings:
 				yield from self._read_value_with_encoding(field_type_encoding)
@@ -956,10 +874,10 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		elif not encoding_string:
 			raise InvalidTypedStreamError("Encountered empty type encoding string")
 		
-		encodings = list(_split_encodings(encoding_string))
-		yield BeginTypedValues(encodings)
-		for encoding in encodings:
-			yield from self._read_value_with_encoding(encoding)
+		type_encodings = list(encodings.split_encodings(encoding_string))
+		yield BeginTypedValues(type_encodings)
+		for type_encoding in type_encodings:
+			yield from self._read_value_with_encoding(type_encoding)
 		yield EndTypedValues()
 	
 	def _read_all_values(self) -> typing.Iterator[ReadEvent]:
