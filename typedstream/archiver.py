@@ -212,18 +212,20 @@ def archived_class(python_class: typing.Type[_KAO]) -> typing.Type[_KAO]:
 class Struct(advanced_repr.AsMultilineStringBase):
 	"""Representation of a C struct as it is stored in a typedstream."""
 	
+	name: bytes
 	fields: typing.List[typing.Any]
 	
-	def __init__(self, fields: typing.List[typing.Any]) -> None:
+	def __init__(self, name: bytes, fields: typing.List[typing.Any]) -> None:
 		super().__init__()
 		
+		self.name = name
 		self.fields = fields
 	
 	def __repr__(self) -> str:
-		return f"{type(self).__module__}.{type(self).__qualname__}(fields={self.fields!r})"
+		return f"{type(self).__module__}.{type(self).__qualname__}(name={self.name!r}, fields={self.fields!r})"
 	
 	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
-		yield "struct:"
+		yield f"struct {self.name.decode('ascii', errors='backslashreplace')}:"
 		for field_value in self.fields:
 			for line in advanced_repr.as_multiline_string(field_value, calling_self=self, state=state):
 				yield "\t" + line
@@ -364,7 +366,7 @@ class Unarchiver(object):
 			if not isinstance(end, stream.EndStruct):
 				raise ValueError(f"Expected EndStruct, not {type(end)}")
 			
-			return Struct(fields)
+			return Struct(first.name, fields)
 		else:
 			raise ValueError(f"Unexpected event at beginning of untyped value: {type(first)}")
 	
