@@ -62,6 +62,20 @@ def split_encodings(encodings: bytes) -> typing.Iterable[bytes]:
 		start = end
 
 
+def join_encodings(encodings: typing.Iterable[bytes]) -> bytes:
+	"""Combine a sequence of type encodings into a single type encoding string.
+	
+	.. note::
+	
+		This function currently doesn't perform any checking on its inputs
+		and is currently equivalent to ``b"".join(encodings)``,
+		but such checks may be added in the future.
+		All elements of ``encodings`` should be valid type encoding strings.
+	"""
+	
+	return b"".join(encodings)
+
+
 def parse_array_encoding(array_encoding: bytes) -> typing.Tuple[int, bytes]:
 	"""Parse an array type encoding into its length and element type encoding."""
 	
@@ -85,6 +99,23 @@ def parse_array_encoding(array_encoding: bytes) -> typing.Tuple[int, bytes]:
 	return int(length_string.decode("ascii")), element_type_encoding
 
 
+def build_array_encoding(length: int, element_type_encoding: bytes) -> bytes:
+	"""Build an array type encoding from a length and an element type encoding.
+	
+	.. note::
+	
+		This function currently doesn't perform any checking on ``element_type_encoding``,
+		but such checks may be added in the future.
+		``element_type_encoding`` should always be a valid type encoding string.
+	"""
+	
+	if length < 0:
+		raise ValueError(f"Array length cannot be negative: {length}")
+	
+	length_string = str(length).encode("ascii")
+	return b"[" + length_string + element_type_encoding + b"]"
+
+
 def parse_struct_encoding(struct_encoding: bytes) -> typing.Tuple[bytes, typing.Sequence[bytes]]:
 	"""Parse an array type encoding into its name and field type encodings."""
 	
@@ -101,3 +132,16 @@ def parse_struct_encoding(struct_encoding: bytes) -> typing.Tuple[bytes, typing.
 	name = struct_encoding[1:equals_pos]
 	field_type_encodings = list(split_encodings(struct_encoding[equals_pos+1:-1]))
 	return name, field_type_encodings
+
+
+def build_struct_encoding(name: bytes, field_type_encodings: typing.Iterable[bytes]) -> bytes:
+	"""Build a struct type encoding from a name and field type encodings.
+	
+	.. note::
+	
+		This function currently doesn't perform any checking on ``field_type_encodings``,
+		but such checks may be added in the future.
+		All elements of ``field_type_encodings`` should be valid type encoding strings.
+	"""
+	
+	return b"{" + name + b"=" + join_encodings(field_type_encodings) + b"}"
