@@ -210,8 +210,12 @@ def archived_class(python_class: typing.Type[_KAO]) -> typing.Type[_KAO]:
 	return python_class
 
 
-class Struct(advanced_repr.AsMultilineStringBase):
-	"""Representation of a C struct as it is stored in a typedstream."""
+class GenericStruct(advanced_repr.AsMultilineStringBase):
+	"""Representation of a generic C struct value as it is stored in a typedstream.
+	
+	This class is only used for struct values whose struct type is not known.
+	Structs of known types are represented as instances of custom Python classes instead.
+	"""
 	
 	name: bytes
 	fields: typing.List[typing.Any]
@@ -230,6 +234,32 @@ class Struct(advanced_repr.AsMultilineStringBase):
 		for field_value in self.fields:
 			for line in advanced_repr.as_multiline_string(field_value, calling_self=self, state=state):
 				yield "\t" + line
+
+
+_KS = typing.TypeVar("_KS", bound="KnownStruct")
+
+
+class KnownStruct(metaclass=abc.ABCMeta):
+	struct_name: typing.ClassVar[bytes]
+	field_encodings: typing.ClassVar[typing.Sequence[bytes]]
+	encoding: typing.ClassVar[bytes]
+	
+	def __init_subclass__(cls) -> None:
+		super().__init_subclass__()
+		
+		cls.encoding = encodings.build_struct_encoding(cls.struct_name, cls.field_encodings)
+
+
+struct_classes_by_encoding: typing.Dict[bytes, typing.Type[KnownStruct]] = {}
+
+
+def register_struct_class(python_class: typing.Type[KnownStruct]) -> None:
+	struct_classes_by_encoding[python_class.encoding] = python_class
+
+
+def struct_class(python_class: typing.Type[_KS]) -> typing.Type[_KS]:
+	register_struct_class(python_class)
+	return python_class
 
 
 # Placeholder for unset lookahead parameters.
@@ -362,14 +392,25 @@ class Unarchiver(object):
 			
 			return array
 		elif isinstance(first, stream.BeginStruct):
-			_, expected_field_encodings = encodings.parse_struct_encoding(expected_encoding)
+			python_struct_class: typing.Optional[typing.Type[KnownStruct]]
+			try:
+				python_struct_class = struct_classes_by_encoding[expected_encoding]
+			except KeyError:
+				python_struct_class = None
+				_, expected_field_encodings = encodings.parse_struct_encoding(expected_encoding)
+			else:
+				expected_field_encodings = python_struct_class.field_encodings
+			
 			fields = [self.decode_any_untyped_value(expected) for expected in expected_field_encodings]
 			
 			end = next(self.reader)
 			if not isinstance(end, stream.EndStruct):
 				raise ValueError(f"Expected EndStruct, not {type(end)}")
 			
-			return Struct(first.name, fields)
+			if python_struct_class is None:
+				return GenericStruct(first.name, fields)
+			else:
+				return python_struct_class(*fields)
 		else:
 			raise ValueError(f"Unexpected event at beginning of untyped value: {type(first)}")
 	
@@ -383,7 +424,7 @@ class Unarchiver(object):
 			raise ValueError(f"Expected BeginTypedValues, not {type(begin)}")
 		
 		if expected_encodings:
-			if tuple(begin.encodings) != tuple(expected_encodings):
+			if not encodings.all_encodings_match_expected(begin.encodings, expected_encodings):
 				raise ValueError(f"Expected type encodings {expected_encodings}, but got type encodings {begin.encodings} in stream")
 		else:
 			# Needs to be converted to a tuple to make mypy happy

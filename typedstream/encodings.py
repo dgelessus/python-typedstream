@@ -145,3 +145,55 @@ def build_struct_encoding(name: bytes, field_type_encodings: typing.Iterable[byt
 	"""
 	
 	return b"{" + name + b"=" + join_encodings(field_type_encodings) + b"}"
+
+
+def anonymize_struct_names(encoding: bytes) -> bytes:
+	"""Anonymize the names of all structs that appear in ``encoding``,
+	i. e. replace their names with ``?``.
+	
+	Array and struct type encodings are parsed and their element/field types are anonymized recursively.
+	If ``encoding`` doesn't contain named struct types anywhere,
+	it is returned unchanged.
+	
+	This transformation is needed because struct names in typedstreams are sometimes replaced with ``?``,
+	even if the struct has a name in the headers and is not actually anonymous.
+	"""
+	
+	if encoding.startswith(b"{"):
+		name, field_type_encodings = parse_struct_encoding(encoding)
+		anonymized_field_type_encodings = [anonymize_struct_names(field_encoding) for field_encoding in field_type_encodings]
+		return build_struct_encoding(b"?", anonymized_field_type_encodings)
+	elif encoding.startswith(b"["):
+		length, element_type_encoding = parse_array_encoding(encoding)
+		anonymized_element_type_encoding = anonymize_struct_names(element_type_encoding)
+		return build_array_encoding(length, anonymized_element_type_encoding)
+	else:
+		return encoding
+
+
+def encoding_matches_expected(actual_encoding: bytes, expected_encoding: bytes) -> bool:
+	"""Check whether ``actual_encoding`` matches ``expected_encoding``,
+	accounting for struct names in ``actual_encoding`` possibly being anonymized.
+	"""
+	
+	return (
+		actual_encoding == expected_encoding
+		or actual_encoding == anonymize_struct_names(expected_encoding)
+	)
+
+
+def all_encodings_match_expected(actual_encodings: typing.Sequence[bytes], expected_encodings: typing.Sequence[bytes]) -> bool:
+	"""Check whether all of ``actual_encodings`` match ``expected_encodings``,
+	accounting for struct names in ``actual_encodings`` possibly being anonymized.
+	
+	If ``actual_encodings`` and ``expected_encodings`` don't have the same length,
+	they are considered to be not matching.
+	"""
+	
+	return (
+		len(actual_encodings) == len(expected_encodings)
+		and all(
+			encoding_matches_expected(actual, expected)
+			for actual, expected in zip(actual_encodings, expected_encodings)
+		)
+	)
