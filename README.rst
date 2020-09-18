@@ -22,7 +22,7 @@ such as the Stickies and Grapher applications.
     but might not use the same data format.
     For example,
     GNUstep's NSArchiver/NSUnarchiver implementations use a completely different format,
-    with a `GNUstep archive` signature string.
+    with a ``GNUstep archive`` signature string.
 
 Features
 --------
@@ -32,8 +32,21 @@ Features
   and a command-line tool (for quick inspection of files from the command line).
 * Typedstream data is automatically parsed and translated to appropriate Python data types.
 
-  * Unlike with the Objective-C `NSCoder <https://developer.apple.com/documentation/foundation/nscoder?language=objc>`__ API,
-    there is no need to explicitly provide the types of all values in order to read them.
+  * Standard Foundation objects and structures are recognized and translated to dedicated Python objects with properly named attributes.
+  * Users of the library can create custom Python classes
+    to decode and represent classes and structure types that aren't supported by default.
+  * Unrecognized objects and structures are still parsed,
+    but are represented as generic objects whose contents can only be accessed by index
+    (because typedstream data doesn't include field names).
+
+* Unlike with the Objective-C `NSCoder <https://developer.apple.com/documentation/foundation/nscoder?language=objc>`__ API,
+  values can be read without knowing their exact type beforehand.
+  However, when the expected types in a certain context are known,
+  the types in the typedstream are checked to make sure that they match.
+* In addition to the high-level NSUnarchiver-style decoder,
+  an iterative stream/event-based reader is provided,
+  which can be used (to some extent)
+  to read large typedstreams without storing them fully in memory.
 
 Requirements
 ------------
@@ -82,20 +95,60 @@ TODO
 Command-line interface
 ^^^^^^^^^^^^^^^^^^^^^^
 
-TODO
+Full high-level decoding:
+
+.. code-block:: sh
+
+    $ pytypedstream decode StickiesDatabase
+    NSMutableArray, 2 elements:
+        object of class Document v1, extends NSObject v0, contents:
+            NSMutableData(b"rtfd\x00\x00\x00\x00[...]")
+            0
+            struct ?:
+                struct ?:
+                    8.0
+                    224.0
+                struct ?:
+                    442.0
+                    251.0
+            0
+            <NSDate: 2003-03-05 02:13:27.454397+00:00>
+            <NSDate: 2007-09-26 14:51:07.340778+00:00>
+        [...]
+
+Low-level stream-based reading/dumping:
+
+.. code-block:: sh
+
+    $ pytypedstream read StickiesDatabase
+    streamer version 4, byte order little, system version 1000
+    
+    begin typed values (types [b'@'])
+        begin literal object (#0)
+            class NSMutableArray v0 (#1)
+            class NSArray v0 (#2)
+            class NSObject v0 (#3)
+            None
+            begin typed values (types [b'i'])
+                2
+            end typed values
+            begin typed values (types [b'@'])
+                begin literal object (#4)
+                    class Document v1 (#5)
+                    <reference to class #3>
+                    [...]
+                end literal object
+            end typed values
+            [...]
+        end literal object
+    end typed values
 
 Limitations
 -----------
 
-This library only understands the basic structure of typedstream data.
-It decodes the typedstream format's low-level type information and data format
-into matching Python data types and recreates the references between objects.
-However,
-it does not have any knowledge about the high-level meaning of the values and objects,
-so it cannot automatically convert these values and objects into meaningful high-level data structures.
-
+Many common classes and structure types from Foundation, AppKit, and other standard frameworks are not supported yet.
 How each class encodes its data in a typedstream is almost never documented,
-and the relevant Objective-C implementation source code is often not available,
+and the relevant Objective-C implementation source code is normally not available,
 so usually the only way to find out the meaning of the values in a typedstream is through experimentation and educated guessing.
 
 Writing typedstream data is not supported at all.
