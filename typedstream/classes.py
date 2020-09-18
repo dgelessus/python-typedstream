@@ -4,6 +4,7 @@ import typing
 
 from . import advanced_repr
 from . import archiver
+from . import encodings
 
 
 @archiver.archived_class
@@ -22,7 +23,7 @@ class NSData(NSObject):
 			length = unarchiver.decode_typed_values(b"i")
 			if length < 0:
 				raise ValueError(f"NSData length cannot be negative: {length}")
-			self.data = unarchiver.decode_typed_values(f"[{length}c]".encode("ascii"))
+			self.data = unarchiver.decode_typed_values(encodings.build_array_encoding(length, b"c"))
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")
 	
