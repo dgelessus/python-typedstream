@@ -385,7 +385,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 	
 	_EOF_MESSAGE: typing.ClassVar[str] = "End of typedstream reached"
 	
-	_is_debug_on: bool
 	_close_stream: bool
 	_stream: typing.BinaryIO
 	
@@ -429,18 +428,16 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		
 		return cls(open(filename, "rb"), close=True, **kwargs)
 	
-	def __init__(self, stream: typing.BinaryIO, *, close: bool = False, debug: bool = False) -> None:
+	def __init__(self, stream: typing.BinaryIO, *, close: bool = False) -> None:
 		"""Create a :class:`TypedStreamReader` that reads data from the given raw byte stream.
 		
 		:param stream: The raw byte stream from which to read the typedstream data.
 		:param close: Controls whether the raw stream should also be closed when :meth:`close` is called.
 			By default this is ``False`` and callers are expected to close the raw stream themselves after closing the :class:`TypedStreamReader`.
-		:param debug: If true, print lots of debugging status information while reading the stream.
 		"""
 		
 		super().__init__()
 		
-		self._is_debug_on = debug
 		self._close_stream = close
 		self._stream = stream
 		
@@ -483,16 +480,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 	def __next__(self) -> ReadEvent:
 		return next(self._events_iterator)
 	
-	def _debug(self, message: str) -> None:
-		"""If this reader has debugging enabled (i. e. ``debug=True`` was passed to the constructor),
-		print out the given message.
-		Otherwise do nothing.
-		"""
-		
-		# TODO Replace this with a proper logging mechanism.
-		if self._is_debug_on:
-			print(message)
-	
 	def _read_exact(self, byte_count: int) -> bytes:
 		"""Read byte_count bytes from the raw stream and raise an exception if too few bytes are read
 		(i. e. if EOF was hit prematurely).
@@ -519,7 +506,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		
 		if head is None:
 			head = int.from_bytes(self._read_exact(1), self.byte_order, signed=True)
-			self._debug(f"Head byte: {head} ({head & 0xff:#x})")
 		return head
 	
 	def _read_integer(self, head: typing.Optional[int] = None, *, signed: bool) -> int:
@@ -530,23 +516,16 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		:return: The decoded integer value.
 		"""
 		
-		self._debug("Standalone integer")
 		head = self._read_head_byte(head)
 		if head not in TAG_RANGE:
 			if signed:
-				v = head
+				return head
 			else:
-				v = head & 0xff
-			self._debug(f"\t... literal integer in head: {v}")
-			return v
+				return head & 0xff
 		elif head == TAG_INTEGER_2:
-			v = int.from_bytes(self._read_exact(2), self.byte_order, signed=signed)
-			self._debug(f"\t... literal integer in 2 bytes: {v} ({v:#x})")
-			return v
+			return int.from_bytes(self._read_exact(2), self.byte_order, signed=signed)
 		elif head == TAG_INTEGER_4:
-			v = int.from_bytes(self._read_exact(4), self.byte_order, signed=signed)
-			self._debug(f"\t... literal integer in 4 bytes: {v} ({v:#x})")
-			return v
+			return int.from_bytes(self._read_exact(4), self.byte_order, signed=signed)
 		else:
 			raise InvalidTypedStreamError(f"Invalid head tag in this context: {head} ({head & 0xff:#x}")
 	
@@ -558,8 +537,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		"""
 		
 		(self.streamer_version, signature_length) = self._read_exact(2)
-		self._debug(f"Streamer version {self.streamer_version}")
-		self._debug(f"Signature length {signature_length}")
 		
 		if self.streamer_version < STREAMER_VERSION_OLD_NEXTSTEP or self.streamer_version > STREAMER_VERSION_CURRENT:
 			raise InvalidTypedStreamError(f"Invalid streamer version: {self.streamer_version}")
@@ -570,15 +547,12 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 			raise InvalidTypedStreamError(f"The signature string must be exactly {SIGNATURE_LENGTH} bytes long, not {signature_length}")
 		
 		signature = self._read_exact(signature_length)
-		self._debug(f"Signature {signature!r}")
 		try:
 			self.byte_order = _SIGNATURE_TO_ENDIANNESS_MAP[signature]
 		except KeyError:
 			raise InvalidTypedStreamError(f"Invalid signature string: {signature!r}")
-		self._debug(f"\t=> byte order {self.byte_order}")
 		
 		self.system_version = self._read_integer(signed=False)
-		self._debug(f"System version {self.system_version}")
 	
 	def _read_float(self, head: typing.Optional[int] = None) -> float:
 		"""Read a low-level single-precision float value.
@@ -587,7 +561,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		:return: The decoded float value.
 		"""
 		
-		self._debug("Single-precision float number")
 		head = self._read_head_byte(head)
 		if head == TAG_FLOATING_POINT:
 			struc = _FLOAT_STRUCTS_BY_BYTE_ORDER[self.byte_order]
@@ -603,7 +576,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		:return: The decoded double value.
 		"""
 		
-		self._debug("Double-precision float number")
 		head = self._read_head_byte(head)
 		if head == TAG_FLOATING_POINT:
 			struc = _DOUBLE_STRUCTS_BY_BYTE_ORDER[self.byte_order]
@@ -623,17 +595,12 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		:return: The read string data, which may be ``nil``/``None``.
 		"""
 		
-		self._debug("Unshared string")
 		head = self._read_head_byte(head)
 		if head == TAG_NIL:
-			self._debug("\t... nil")
 			return None
 		else:
 			length = self._read_integer(head, signed=False)
-			self._debug(f"\t... length {length}")
-			contents = self._read_exact(length)
-			self._debug(f"\t... contents {contents!r}")
-			return contents
+			return self._read_exact(length)
 	
 	def _read_shared_string(self, head: typing.Optional[int] = None) -> typing.Optional[bytes]:
 		"""Read a low-level shared string value.
@@ -649,27 +616,19 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		:return: The read string data, which may be ``nil``/``None``.
 		"""
 		
-		self._debug("Shared string")
 		head = self._read_head_byte(head)
 		if head == TAG_NIL:
-			self._debug("\t... nil")
 			return None
 		elif head == TAG_NEW:
-			self._debug("\t... new")
 			string = self._read_unshared_string()
 			if string is None:
 				raise InvalidTypedStreamError("Literal shared string cannot contain a nil unshared string")
-			self._debug(f"\t... {len(self.shared_string_table)} ~ {string!r}")
 			self.shared_string_table.append(string)
 			return string
 		else:
-			self._debug("\t... reference")
 			reference_number = self._read_integer(head, signed=True)
 			decoded = _decode_reference_number(reference_number)
-			self._debug(f"\t... number {decoded}")
-			string = self.shared_string_table[decoded]
-			self._debug(f"\t~ {string!r}")
-			return string
+			return self.shared_string_table[decoded]
 	
 	def _read_object_reference(self, referenced_type: ObjectReference.Type, head: typing.Optional[int] = None) -> ObjectReference:
 		"""Read an object reference value.
@@ -685,12 +644,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		:return: The read object reference.
 		"""
 		
-		self._debug(f"Reference to {referenced_type.value}")
 		reference_number = self._read_integer(head, signed=True)
-		self._debug(f"... number {reference_number}")
-		decoded = _decode_reference_number(reference_number)
-		self._debug(f"... decoded to {decoded}")
-		return ObjectReference(referenced_type, decoded)
+		return ObjectReference(referenced_type, _decode_reference_number(reference_number))
 	
 	def _read_c_string(self, head: typing.Optional[int] = None) -> typing.Optional[typing.Union[CString, ObjectReference]]:
 		"""Read a C string value.
@@ -705,13 +660,10 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		:return: The read C string value or reference, which may be ``nil``/``None``.
 		"""
 		
-		self._debug("C string")
 		head = self._read_head_byte(head)
 		if head == TAG_NIL:
-			self._debug("\t... nil")
 			return None
 		elif head == TAG_NEW:
-			self._debug("\t... new")
 			string = self._read_shared_string()
 			if string is None:
 				raise InvalidTypedStreamError("Literal C string cannot contain a nil shared string")
@@ -722,7 +674,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 				raise InvalidTypedStreamError("C string value cannot contain zero bytes")
 			return CString(string)
 		else:
-			self._debug("\t... reference")
 			return self._read_object_reference(ObjectReference.Type.C_STRING, head)
 	
 	def _read_class(self, head: typing.Optional[int] = None) -> typing.Iterable[typing.Optional[typing.Union[SingleClass, ObjectReference]]]:
@@ -733,24 +684,18 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 			See :class:`SingleClass` for information about what events are generated when and what they mean.
 		"""
 		
-		self._debug("Class")
 		head = self._read_head_byte(head)
 		while head == TAG_NEW:
-			self._debug("\t... new")
 			name = self._read_shared_string()
 			if name is None:
 				raise InvalidTypedStreamError("Class name cannot be nil")
-			self._debug(f"\t... name {name!r}")
 			version = self._read_integer(signed=True)
-			self._debug(f"\t... version {version}")
 			yield SingleClass(name, version)
 			head = self._read_head_byte()
 		
 		if head == TAG_NIL:
-			self._debug("\t... nil")
 			yield None
 		else:
-			self._debug("\t... reference")
 			yield self._read_object_reference(ObjectReference.Type.CLASS, head)
 	
 	def _read_object(self, head: typing.Optional[int] = None) -> typing.Iterable[ReadEvent]:
@@ -762,13 +707,10 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 			See :class:`BeginObject` and :class:`EndObject` for information about what events are generated when and what they mean.
 		"""
 		
-		self._debug("Object")
 		head = self._read_head_byte(head)
 		if head == TAG_NIL:
-			self._debug("\t... nil")
 			yield None
 		elif head == TAG_NEW:
-			self._debug("\t... new")
 			yield BeginObject()
 			yield from self._read_class()
 			next_head = self._read_head_byte()
@@ -777,7 +719,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 				next_head = self._read_head_byte()
 			yield EndObject()
 		else:
-			self._debug("\t... reference")
 			yield self._read_object_reference(ObjectReference.Type.OBJECT, head)
 	
 	def _read_value_with_encoding(self, type_encoding: bytes, head: typing.Optional[int] = None) -> typing.Iterable[ReadEvent]:
@@ -792,8 +733,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 			Simple values are represented by single events,
 			but more complex values (classes, objects, arrays, structs) usually generate multiple events.
 		"""
-		
-		self._debug(f"Value with type encoding {type_encoding!r}")
 		
 		# Unlike other integer types,
 		# chars are always stored literally -
@@ -857,8 +796,6 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		:return: An iterable of events representing the typed values.
 			See :class:`BeginTypedValues` and :class:`EndTypedValues` for information about what events are generated when and what they mean.
 		"""
-		
-		self._debug("Type encoding-prefixed value")
 		
 		try:
 			head = self._read_head_byte(head)
