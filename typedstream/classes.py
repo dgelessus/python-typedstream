@@ -95,7 +95,7 @@ class NSValue(NSObject, advanced_repr.AsMultilineStringBase):
 	
 	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		value_it = iter(advanced_repr.as_multiline_string(self.value, calling_self=self, state=state))
-		yield f"{type(self).__name__}, type {self.type_encoding}: " + next(value_it, "")
+		yield f"{type(self).__name__}, type {self.type_encoding!r}: " + next(value_it, "")
 		for line in value_it:
 			yield "\t" + line
 	
@@ -152,7 +152,7 @@ class NSMutableArray(NSArray):
 
 @archiver.archived_class
 class NSDictionary(NSObject, advanced_repr.AsMultilineStringBase):
-	contents: typing.OrderedDict[typing.Any, typing.Any]
+	contents: "collections.OrderedDict[typing.Any, typing.Any]"
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
