@@ -1,3 +1,4 @@
+import datetime
 import typing
 
 from . import advanced_repr
@@ -31,6 +32,29 @@ class NSMutableData(NSData):
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
+
+
+@archiver.archived_class
+class NSDate(NSObject):
+	ABSOLUTE_REFERENCE_DATE: typing.ClassVar[datetime.datetime] = datetime.datetime(2001, 1, 1, tzinfo=datetime.timezone.utc)
+	
+	absolute_reference_date_offset: float
+	
+	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+		if class_version == 0:
+			self.absolute_reference_date_offset = unarchiver.decode_typed_values(b"d")
+		else:
+			raise ValueError(f"Unsupported version: {class_version}")
+	
+	@property
+	def value(self) -> datetime.datetime:
+		return type(self).ABSOLUTE_REFERENCE_DATE + datetime.timedelta(seconds=self.absolute_reference_date_offset)
+	
+	def __str__(self) -> str:
+		return f"<{type(self).__name__}: {self.value}>"
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__name__}(absolute_reference_date_offset={self.absolute_reference_date_offset})"
 
 
 @archiver.archived_class
