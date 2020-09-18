@@ -20,6 +20,8 @@ class NSData(NSObject):
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
 			length = unarchiver.decode_typed_values(b"i")
+			if length < 0:
+				raise ValueError(f"NSData length cannot be negative: {length}")
 			self.data = unarchiver.decode_typed_values(f"[{length}c]".encode("ascii"))
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")
@@ -115,6 +117,8 @@ class NSArray(NSObject, advanced_repr.AsMultilineStringBase):
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
 			count = unarchiver.decode_typed_values(b"i")
+			if count < 0:
+				raise ValueError(f"NSArray element count cannot be negative: {count}")
 			self.elements = []
 			for _ in range(count):
 				self.elements.append(unarchiver.decode_typed_values(b"@"))
@@ -153,6 +157,8 @@ class NSDictionary(NSObject, advanced_repr.AsMultilineStringBase):
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
 			count = unarchiver.decode_typed_values(b"i")
+			if count < 0:
+				raise ValueError(f"NSDictionary element count cannot be negative: {count}")
 			self.contents = collections.OrderedDict()
 			for _ in range(count):
 				key = unarchiver.decode_typed_values(b"@")
