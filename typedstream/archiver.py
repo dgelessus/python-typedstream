@@ -1,4 +1,6 @@
 import abc
+import io
+import os
 import typing
 
 from . import advanced_repr
@@ -469,3 +471,40 @@ class Unarchiver(object):
 			contents.append(self.decode_typed_values(_lookahead=lookahead))
 		
 		return contents
+
+
+def unarchive_from_stream(f: typing.BinaryIO) -> typing.Any:
+	"""Unarchive the given binary data stream containing a single archived root value.
+	
+	:raise ValueError: If the stream doesn't contain exactly one root value.
+	"""
+	
+	with stream.TypedStreamReader(f) as ts:
+		values = Unarchiver(ts).decode_all()
+	
+	if not values:
+		raise ValueError("Archive contains no values")
+	elif len(values) > 1:
+		raise ValueError(f"Archive contains {len(values)} root values (expected exactly one root value)")
+	else:
+		return values[0]
+
+
+def unarchive_from_data(data: bytes) -> typing.Any:
+	"""Unarchive the given data containing a single archived root value.
+	
+	:raise ValueError: If the data doesn't contain exactly one root value.
+	"""
+	
+	with io.BytesIO(data) as f:
+		return unarchive_from_stream(f)
+
+
+def unarchive_from_file(path: typing.Union[str, bytes, os.PathLike]) -> typing.Any:
+	"""Unarchive the given file containing a single archived root value.
+	
+	:raise ValueError: If the file doesn't contain exactly one root value.
+	"""
+	
+	with open(path, "rb") as f:
+		return unarchive_from_stream(f)
