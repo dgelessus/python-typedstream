@@ -3,6 +3,7 @@ import typing
 
 from . import advanced_repr
 from . import encodings
+from . import old_binary_plist
 from . import stream
 
 
@@ -443,6 +444,13 @@ class Unarchiver(object):
 			raise ValueError(f"Expected EndTypedValues, not {type(end)}")
 		
 		return ret
+	
+	def decode_property_list(self) -> typing.Any:
+		length = self.decode_typed_values(b"i")
+		if length < 0:
+			raise ValueError(f"Property list data length cannot be negative: {length}")
+		data = self.decode_typed_values(encodings.build_array_encoding(length, b"c"))
+		return old_binary_plist.deserialize(data)
 	
 	def decode_all(self) -> typing.Sequence[typing.Any]:
 		contents = []
