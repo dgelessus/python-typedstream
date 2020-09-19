@@ -445,11 +445,16 @@ class Unarchiver(object):
 		
 		return ret
 	
+	def decode_array(self, element_type_encoding: bytes, length: int) -> typing.Any:
+		# Actually always returns a sequence,
+		# but a more specific return type than Any makes this method annoying to use.
+		return self.decode_typed_values(encodings.build_array_encoding(length, element_type_encoding))
+	
 	def decode_property_list(self) -> typing.Any:
 		length = self.decode_typed_values(b"i")
 		if length < 0:
 			raise ValueError(f"Property list data length cannot be negative: {length}")
-		data = self.decode_typed_values(encodings.build_array_encoding(length, b"c"))
+		data = self.decode_array(b"c", length)
 		return old_binary_plist.deserialize(data)
 	
 	def decode_all(self) -> typing.Sequence[typing.Any]:
