@@ -1,5 +1,7 @@
 """Implementation of an old binary property list format,
 apparently originally from NeXTSTEP.
+This format is *not* the same as the modern Mac OS X/macOS binary property list format,
+which starts with the signature string ``bplist00`` and has a completely different structure.
 
 This format supports only the following data types:
 
