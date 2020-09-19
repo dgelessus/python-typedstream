@@ -193,3 +193,30 @@ class NSMutableDictionary(NSDictionary):
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
+
+
+@archiver.archived_class
+class NSFont(NSObject):
+	name: str
+	size: float
+	flags_unknown: typing.Tuple[int, int, int, int]
+	
+	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+		if class_version == 21:
+			name = unarchiver.decode_property_list()
+			if not isinstance(name, str):
+				raise TypeError(f"Font name must be a string, not {type(name)}")
+			self.name = name
+			self.size = unarchiver.decode_typed_values(b"f")
+			self.flags_unknown = (
+				unarchiver.decode_typed_values(b"c"),
+				unarchiver.decode_typed_values(b"c"),
+				unarchiver.decode_typed_values(b"c"),
+				unarchiver.decode_typed_values(b"c"),
+			)
+		else:
+			raise ValueError(f"Unsupported version: {class_version}")
+	
+	def __repr__(self) -> str:
+		flags_repr = ", ".join([f"0x{flag:>02x}" for flag in self.flags_unknown])
+		return f"{type(self).__name__}(name={self.name!r}, size={self.size!r}, flags_unknown=({flags_repr}))"
