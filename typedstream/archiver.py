@@ -1,6 +1,6 @@
 import abc
-import io
 import os
+import types
 import typing
 
 from . import advanced_repr
@@ -271,16 +271,70 @@ def struct_class(python_class: typing.Type[_KS]) -> typing.Type[_KS]:
 _NO_LOOKAHEAD = object()
 
 
-class Unarchiver(object):
+class Unarchiver(typing.ContextManager["Unarchiver"]):
 	reader: stream.TypedStreamReader
+	_close_reader: bool
 	_lookahead: typing.Any
 	shared_object_table: typing.List[typing.Tuple[stream.ObjectReference.Type, typing.Any]]
 	
-	def __init__(self, reader: stream.TypedStreamReader) -> None:
+	@classmethod
+	def from_data(cls, data: bytes) -> "Unarchiver":
+		"""Create an unarchiver for the given typedstream data."""
+		
+		return cls(stream.TypedStreamReader.from_data(data), close=True)
+	
+	@classmethod
+	def from_stream(cls, f: typing.BinaryIO, *, close: bool = False) -> "Unarchiver":
+		"""Create an unarchiver for the typedstream data in the given byte stream.
+		
+		:param f: The byte stream from which to decode data.
+		:param close: Controls whether the raw stream should also be closed when :meth:`close` is called.
+			By default this is ``False`` and callers are expected to close the raw stream themselves after closing the :class:`Unarchiver`.
+		"""
+		
+		return cls(stream.TypedStreamReader(f, close=close), close=True)
+	
+	@classmethod
+	def open(cls, filename: typing.Union[str, bytes, os.PathLike]) -> "Unarchiver":
+		"""Create an unarchiver for the typedstream file at the given path."""
+		
+		return cls(stream.TypedStreamReader.open(filename), close=True)
+	
+	def __init__(self, reader: stream.TypedStreamReader, *, close: bool = False) -> None:
+		"""Create an :class:`Unarchiver` that decodes data based on events from the given low-level :class:`~typedstream.archiver.TypedStreamReader`.
+		
+		:param reader: The low-level reader from which to read the typedstream events.
+		:param close: Controls whether the low-level reader should also be closed when :meth:`close` is called.
+			By default this is ``False`` and callers are expected to close the reader themselves after closing the :class:`Unarchiver`.
+		"""
+		
 		super().__init__()
 		
 		self.reader = reader
+		self._close_reader = close
 		self.shared_object_table = []
+	
+	def __enter__(self) -> "Unarchiver":
+		return self
+	
+	def __exit__(
+		self,
+		exc_type: typing.Optional[typing.Type[BaseException]],
+		exc_val: typing.Optional[BaseException],
+		exc_tb: typing.Optional[types.TracebackType],
+	) -> typing.Optional[bool]:
+		self.close()
+		return None
+	
+	def close(self) -> None:
+		"""Close this :class:`Unarchiver`.
+		
+		If ``close=True`` was passed when this :class:`Unarchiver` was created,
+		the underlying :class:`~typedstream.archiver.TypedStreamReader`'s ``close`` method is called as well.
+		"""
+		
+		if self._close_reader:
+			self.reader.close()
 	
 	def _lookup_reference(self, ref: stream.ObjectReference) -> typing.Any:
 		ref_type, obj = self.shared_object_table[ref.number]
@@ -471,6 +525,21 @@ class Unarchiver(object):
 			contents.append(self.decode_typed_values(_lookahead=lookahead))
 		
 		return contents
+	
+	def decode_single_root(self) -> typing.Any:
+		"""Decode the single root value in this unarchiver's typedstream.
+		
+		:raise ValueError: If the stream doesn't contain exactly one root value.
+		"""
+		
+		values = self.decode_all()
+		
+		if not values:
+			raise ValueError("Archive contains no values")
+		elif len(values) > 1:
+			raise ValueError(f"Archive contains {len(values)} root values (expected exactly one root value)")
+		else:
+			return values[0]
 
 
 def unarchive_from_stream(f: typing.BinaryIO) -> typing.Any:
@@ -479,15 +548,8 @@ def unarchive_from_stream(f: typing.BinaryIO) -> typing.Any:
 	:raise ValueError: If the stream doesn't contain exactly one root value.
 	"""
 	
-	with stream.TypedStreamReader(f) as ts:
-		values = Unarchiver(ts).decode_all()
-	
-	if not values:
-		raise ValueError("Archive contains no values")
-	elif len(values) > 1:
-		raise ValueError(f"Archive contains {len(values)} root values (expected exactly one root value)")
-	else:
-		return values[0]
+	with Unarchiver.from_stream(f) as unarchiver:
+		return unarchiver.decode_single_root()
 
 
 def unarchive_from_data(data: bytes) -> typing.Any:
@@ -496,8 +558,8 @@ def unarchive_from_data(data: bytes) -> typing.Any:
 	:raise ValueError: If the data doesn't contain exactly one root value.
 	"""
 	
-	with io.BytesIO(data) as f:
-		return unarchive_from_stream(f)
+	with Unarchiver.from_data(data) as unarchiver:
+		return unarchiver.decode_single_root()
 
 
 def unarchive_from_file(path: typing.Union[str, bytes, os.PathLike]) -> typing.Any:
@@ -506,5 +568,5 @@ def unarchive_from_file(path: typing.Union[str, bytes, os.PathLike]) -> typing.A
 	:raise ValueError: If the file doesn't contain exactly one root value.
 	"""
 	
-	with open(path, "rb") as f:
-		return unarchive_from_stream(f)
+	with Unarchiver.open(path) as unarchiver:
+		return unarchiver.decode_single_root()
