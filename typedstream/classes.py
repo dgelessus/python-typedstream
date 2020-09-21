@@ -201,7 +201,7 @@ class NSFont(NSObject):
 	flags_unknown: typing.Tuple[int, int, int, int]
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
-		if class_version == 21:
+		if class_version in {21, 30}:
 			name = unarchiver.decode_property_list()
 			if not isinstance(name, str):
 				raise TypeError(f"Font name must be a string, not {type(name)}")
