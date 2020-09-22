@@ -110,20 +110,8 @@ class NSNumber(NSValue):
 			raise ValueError(f"Unsupported version: {class_version}")
 
 
-@archiver.archived_class
-class NSArray(NSObject, advanced_repr.AsMultilineStringBase):
+class _ArraySetBase(advanced_repr.AsMultilineStringBase):
 	elements: typing.List[typing.Any]
-	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
-		if class_version == 0:
-			count = unarchiver.decode_typed_values(b"i")
-			if count < 0:
-				raise ValueError(f"NSArray element count cannot be negative: {count}")
-			self.elements = []
-			for _ in range(count):
-				self.elements.append(unarchiver.decode_typed_values(b"@"))
-		else:
-			raise ValueError(f"Unsupported version: {class_version}")
 	
 	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		if not self.elements:
@@ -144,7 +132,40 @@ class NSArray(NSObject, advanced_repr.AsMultilineStringBase):
 
 
 @archiver.archived_class
+class NSArray(NSObject, _ArraySetBase):
+	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+		if class_version == 0:
+			count = unarchiver.decode_typed_values(b"i")
+			if count < 0:
+				raise ValueError(f"NSArray element count cannot be negative: {count}")
+			self.elements = []
+			for _ in range(count):
+				self.elements.append(unarchiver.decode_typed_values(b"@"))
+		else:
+			raise ValueError(f"Unsupported version: {class_version}")
+
+
+@archiver.archived_class
 class NSMutableArray(NSArray):
+	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+		if class_version != 0:
+			raise ValueError(f"Unsupported version: {class_version}")
+
+
+@archiver.archived_class
+class NSSet(NSObject, _ArraySetBase):
+	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+		if class_version == 0:
+			count = unarchiver.decode_typed_values(b"I")
+			self.elements = []
+			for _ in range(count):
+				self.elements.append(unarchiver.decode_typed_values(b"@"))
+		else:
+			raise ValueError(f"Unsupported version: {class_version}")
+
+
+@archiver.archived_class
+class NSMutableSet(NSSet):
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
