@@ -157,6 +157,36 @@ class ObjectReference(object):
 		return f"<reference to {self.referenced_type.value} #{self.number}>"
 
 
+class Atom(object):
+	"""A NeXTSTEP atom (NXAtom), i. e. a shared/deduplicated C string.
+	
+	In (Objective-)C on NeXTSTEP,
+	atoms are immutable C strings that have been deduplicated so that two atoms with the same content always have the same address.
+	This allows checking two atoms for equality by just comparing the pointers/addresses,
+	instead of having to compare their contents.
+	Other than that,
+	atoms behave like regular C strings.
+	
+	Mac OS X/macOS no longer supports atoms and throws an exception when attempting to decode them using ``NSUnarchiver``.
+	
+	This is a thin wrapper around a plain :class:`bytes` object.
+	The wrapper class is used to distinguish atoms from untyped bytes.
+	"""
+	
+	contents: typing.Optional[bytes]
+	
+	def __init__(self, contents: typing.Optional[bytes]) -> None:
+		super().__init__()
+		
+		self.contents = contents
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}({self.contents!r})"
+	
+	def __str__(self) -> str:
+		return f"atom: {self.contents!r}"
+
+
 class Selector(object):
 	"""An Objective-C selector.
 	
@@ -377,7 +407,7 @@ class EndStruct(object):
 		return "end struct"
 
 
-ReadEvent = typing.Optional[typing.Union[BeginTypedValues, EndTypedValues, int, float, ObjectReference, CString, Selector, bytes, SingleClass, BeginObject, EndObject, ByteArray, BeginArray, EndArray, BeginStruct, EndStruct]]
+ReadEvent = typing.Optional[typing.Union[BeginTypedValues, EndTypedValues, int, float, ObjectReference, CString, Atom, Selector, bytes, SingleClass, BeginObject, EndObject, ByteArray, BeginArray, EndArray, BeginStruct, EndStruct]]
 
 
 class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Iterator[ReadEvent]):
@@ -731,6 +761,8 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 			yield self._read_double(head)
 		elif type_encoding == b"*":
 			yield self._read_c_string(head)
+		elif type_encoding == b"%":
+			yield Atom(self._read_shared_string(head))
 		elif type_encoding == b":":
 			yield Selector(self._read_shared_string(head))
 		elif type_encoding == b"+":

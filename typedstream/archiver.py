@@ -352,6 +352,8 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 		elif isinstance(first, stream.CString):
 			self.shared_object_table.append((stream.ObjectReference.Type.C_STRING, first.contents))
 			return first.contents
+		elif isinstance(first, stream.Atom):
+			return first.contents
 		elif isinstance(first, stream.Selector):
 			return first.name
 		elif isinstance(first, stream.SingleClass):
