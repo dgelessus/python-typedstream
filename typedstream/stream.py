@@ -771,6 +771,13 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 			yield from self._read_class(head)
 		elif type_encoding == b"@":
 			yield from self._read_object(head)
+		elif type_encoding == b"!":
+			# "!" stands for an int-sized field that should be ignored when (un)archiving.
+			# The "!" *type* is stored in the typedstream when encoding and is expected to be present when decoding,
+			# but no actual data is written or read.
+			# Mac OS X/macOS supports encoding "!" using NSArchiver,
+			# but throws an exception when trying to decode it using NSUnarchiver.
+			yield None
 		elif type_encoding.startswith(b"["):
 			length, element_type_encoding = encodings.parse_array_encoding(type_encoding)
 			
