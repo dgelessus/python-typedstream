@@ -3,6 +3,13 @@ import types
 import typing
 
 
+__all__ = [
+	"RecursiveReprState",
+	"AsMultilineStringBase",
+	"as_multiline_string",
+]
+
+
 class RecursiveReprState(object):
 	"""Holds state during recursive calls to :func:`repr`/``__repr__``-like functions,
 	to track which objects have already been rendered before or are currently still being rendered.

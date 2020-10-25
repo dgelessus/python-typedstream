@@ -9,6 +9,37 @@ import typing
 from . import encodings
 
 
+__all__ = [
+	"STREAMER_VERSION_OLD_NEXTSTEP",
+	"STREAMER_VERSION_CURRENT",
+	"SYSTEM_VERSION_NEXTSTEP_082",
+	"SYSTEM_VERSION_NEXTSTEP_083",
+	"SYSTEM_VERSION_NEXTSTEP_090",
+	"SYSTEM_VERSION_NEXTSTEP_0900",
+	"SYSTEM_VERSION_NEXTSTEP_0901",
+	"SYSTEM_VERSION_NEXTSTEP_0905",
+	"SYSTEM_VERSION_NEXTSTEP_0930",
+	"SYSTEM_VERSION_MAC_OS_X",
+	"InvalidTypedStreamError",
+	"BeginTypedValues",
+	"EndTypedValues",
+	"ObjectReference",
+	"Atom",
+	"Selector",
+	"CString",
+	"SingleClass",
+	"BeginObject",
+	"EndObject",
+	"ByteArray",
+	"BeginArray",
+	"EndArray",
+	"BeginStruct",
+	"EndStruct",
+	"ReadEvent",
+	"TypedStreamReader",
+]
+
+
 _FLOAT_STRUCTS_BY_BYTE_ORDER = {
 	"big": struct.Struct(">f"),
 	"little": struct.Struct("<f"),
@@ -28,16 +59,16 @@ STREAMER_VERSION_OLD_NEXTSTEP = 3
 STREAMER_VERSION_CURRENT = 4
 
 # Signature string for big-endian typedstreams.
-SIGNATURE_BIG_ENDIAN = b"typedstream"
+_SIGNATURE_BIG_ENDIAN = b"typedstream"
 # Signature string for little-endian typedstreams.
-SIGNATURE_LITTLE_ENDIAN = b"streamtyped"
+_SIGNATURE_LITTLE_ENDIAN = b"streamtyped"
 # Both signature strings have the same length.
-assert len(SIGNATURE_BIG_ENDIAN) == len(SIGNATURE_LITTLE_ENDIAN)
-SIGNATURE_LENGTH = len(SIGNATURE_BIG_ENDIAN)
+assert len(_SIGNATURE_BIG_ENDIAN) == len(_SIGNATURE_LITTLE_ENDIAN)
+_SIGNATURE_LENGTH = len(_SIGNATURE_BIG_ENDIAN)
 
-_SIGNATURE_TO_ENDIANNESS_MAP = {
-	SIGNATURE_BIG_ENDIAN: "big",
-	SIGNATURE_LITTLE_ENDIAN: "little",
+_SIGNATURE_TO_BYTE_ORDER_MAP = {
+	_SIGNATURE_BIG_ENDIAN: "big",
+	_SIGNATURE_LITTLE_ENDIAN: "little",
 }
 
 # These values are taken from the NXSYSTEMVERSION constants
@@ -66,35 +97,35 @@ SYSTEM_VERSION_MAC_OS_X = 1000
 # * A "head" is a single-byte value that stores either a single-byte reference number or a tag (indicating a literal string/object or a multi-byte reference number).
 
 # Indicates an integer value, stored in 2 bytes.
-TAG_INTEGER_2 = -127
+_TAG_INTEGER_2 = -127
 # Indicates an integer value, stored in 4 bytes.
-TAG_INTEGER_4 = -126
+_TAG_INTEGER_4 = -126
 # Indicates a floating-point value, stored in 4 or 8 bytes (depending on whether it is a float or a double).
-TAG_FLOATING_POINT = -125
+_TAG_FLOATING_POINT = -125
 # Indicates the start of a string value or an object that is stored literally and not as a backreference.
-TAG_NEW = -124
+_TAG_NEW = -124
 # Indicates a nil value. Used for strings (unshared and shared), classes, and objects.
-TAG_NIL = -123
+_TAG_NIL = -123
 # Indicates the end of an object.
-TAG_END_OF_OBJECT = -122
+_TAG_END_OF_OBJECT = -122
 
 # The lowest and highest values reserved for use as tags.
 # Values outside this range are used to literally encode single-byte integers.
-# Integer values that fall into the tag range must be encoded in two separate bytes using TAG_INTEGER_2
+# Integer values that fall into the tag range must be encoded in two separate bytes using _TAG_INTEGER_2
 # so that they do not conflict with the tags.
-FIRST_TAG = -128
-LAST_TAG = -111
-TAG_RANGE = range(FIRST_TAG, LAST_TAG + 1)
+_FIRST_TAG = -128
+_LAST_TAG = -111
+_TAG_RANGE = range(_FIRST_TAG, _LAST_TAG + 1)
 # The first reference number to be used.
 # This has been chosen to be exactly one higher than the highest tag,
 # so that early reference numbers can be encoded directly in the head.
-FIRST_REFERENCE_NUMBER = LAST_TAG + 1
+_FIRST_REFERENCE_NUMBER = _LAST_TAG + 1
 
 
 def _decode_reference_number(encoded: int) -> int:
 	"""Decode a reference number (as stored in a typedstream) to a regular zero-based index."""
 	
-	return encoded - FIRST_REFERENCE_NUMBER
+	return encoded - _FIRST_REFERENCE_NUMBER
 
 
 class InvalidTypedStreamError(Exception):
@@ -527,14 +558,14 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		"""
 		
 		head = self._read_head_byte(head)
-		if head not in TAG_RANGE:
+		if head not in _TAG_RANGE:
 			if signed:
 				return head
 			else:
 				return head & 0xff
-		elif head == TAG_INTEGER_2:
+		elif head == _TAG_INTEGER_2:
 			return int.from_bytes(self._read_exact(2), self.byte_order, signed=signed)
-		elif head == TAG_INTEGER_4:
+		elif head == _TAG_INTEGER_4:
 			return int.from_bytes(self._read_exact(4), self.byte_order, signed=signed)
 		else:
 			raise InvalidTypedStreamError(f"Invalid head tag in this context: {head} ({head & 0xff:#x}")
@@ -553,12 +584,12 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		elif self.streamer_version == STREAMER_VERSION_OLD_NEXTSTEP:
 			raise InvalidTypedStreamError(f"Old NeXTSTEP streamer version ({self.streamer_version}) not supported (yet?)")
 		
-		if signature_length != SIGNATURE_LENGTH:
-			raise InvalidTypedStreamError(f"The signature string must be exactly {SIGNATURE_LENGTH} bytes long, not {signature_length}")
+		if signature_length != _SIGNATURE_LENGTH:
+			raise InvalidTypedStreamError(f"The signature string must be exactly {_SIGNATURE_LENGTH} bytes long, not {signature_length}")
 		
 		signature = self._read_exact(signature_length)
 		try:
-			self.byte_order = _SIGNATURE_TO_ENDIANNESS_MAP[signature]
+			self.byte_order = _SIGNATURE_TO_BYTE_ORDER_MAP[signature]
 		except KeyError:
 			raise InvalidTypedStreamError(f"Invalid signature string: {signature!r}")
 		
@@ -572,7 +603,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		"""
 		
 		head = self._read_head_byte(head)
-		if head == TAG_FLOATING_POINT:
+		if head == _TAG_FLOATING_POINT:
 			struc = _FLOAT_STRUCTS_BY_BYTE_ORDER[self.byte_order]
 			(v,) = struc.unpack(self._read_exact(struc.size))
 			return v
@@ -587,7 +618,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		"""
 		
 		head = self._read_head_byte(head)
-		if head == TAG_FLOATING_POINT:
+		if head == _TAG_FLOATING_POINT:
 			struc = _DOUBLE_STRUCTS_BY_BYTE_ORDER[self.byte_order]
 			(v,) = struc.unpack(self._read_exact(struc.size))
 			return v
@@ -606,7 +637,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		"""
 		
 		head = self._read_head_byte(head)
-		if head == TAG_NIL:
+		if head == _TAG_NIL:
 			return None
 		else:
 			length = self._read_integer(head, signed=False)
@@ -627,9 +658,9 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		"""
 		
 		head = self._read_head_byte(head)
-		if head == TAG_NIL:
+		if head == _TAG_NIL:
 			return None
-		elif head == TAG_NEW:
+		elif head == _TAG_NEW:
 			string = self._read_unshared_string()
 			if string is None:
 				raise InvalidTypedStreamError("Literal shared string cannot contain a nil unshared string")
@@ -671,9 +702,9 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		"""
 		
 		head = self._read_head_byte(head)
-		if head == TAG_NIL:
+		if head == _TAG_NIL:
 			return None
-		elif head == TAG_NEW:
+		elif head == _TAG_NEW:
 			string = self._read_shared_string()
 			if string is None:
 				raise InvalidTypedStreamError("Literal C string cannot contain a nil shared string")
@@ -695,7 +726,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		"""
 		
 		head = self._read_head_byte(head)
-		while head == TAG_NEW:
+		while head == _TAG_NEW:
 			name = self._read_shared_string()
 			if name is None:
 				raise InvalidTypedStreamError("Class name cannot be nil")
@@ -703,7 +734,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 			yield SingleClass(name, version)
 			head = self._read_head_byte()
 		
-		if head == TAG_NIL:
+		if head == _TAG_NIL:
 			yield None
 		else:
 			yield self._read_object_reference(ObjectReference.Type.CLASS, head)
@@ -718,13 +749,13 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		"""
 		
 		head = self._read_head_byte(head)
-		if head == TAG_NIL:
+		if head == _TAG_NIL:
 			yield None
-		elif head == TAG_NEW:
+		elif head == _TAG_NEW:
 			yield BeginObject()
 			yield from self._read_class()
 			next_head = self._read_head_byte()
-			while next_head != TAG_END_OF_OBJECT:
+			while next_head != _TAG_END_OF_OBJECT:
 				yield from self._read_typed_values(next_head)
 				next_head = self._read_head_byte()
 			yield EndObject()

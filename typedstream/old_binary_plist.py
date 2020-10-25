@@ -36,6 +36,12 @@ import io
 import typing
 
 
+__all__ = [
+	"deserialize_from_stream",
+	"deserialize",
+]
+
+
 # Unicode mapping of the NeXTSTEP 8-bit character set.
 # This mapping was created by taking a byte string containing all bytes from 0x01 through 0xfd (inclusive)
 # and decoding it using the macOS Foundation framework as NSNEXTSTEPStringEncoding:
@@ -49,7 +55,7 @@ import typing
 # which matches their meanings in plain 7-bit ASCII.
 # For compatibility with macOS,
 # we use the latter mapping.
-NEXTSTEP_8_BIT_CHARACTER_MAP = (
+_NEXTSTEP_8_BIT_CHARACTER_MAP = (
 	'\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f'
 	'\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f'
 	' !"#$%&\'()*+,-./'
@@ -102,7 +108,7 @@ def deserialize_from_stream(stream: typing.BinaryIO) -> typing.Any:
 			return data
 		elif type_number == 5:
 			# NSString in NeXTSTEP 8-bit encoding
-			return "".join(NEXTSTEP_8_BIT_CHARACTER_MAP[byte] for byte in data)
+			return "".join(_NEXTSTEP_8_BIT_CHARACTER_MAP[byte] for byte in data)
 		elif type_number == 6:
 			# NSString in UTF-16 (with BOM) encoding
 			return data.decode("utf-16")

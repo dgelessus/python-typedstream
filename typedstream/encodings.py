@@ -1,6 +1,19 @@
 import typing
 
 
+__all__ = [
+	"split_encodings",
+	"join_encodings",
+	"parse_array_encoding",
+	"build_array_encoding",
+	"parse_struct_encoding",
+	"build_struct_encoding",
+	"anonymize_struct_names",
+	"encoding_matches_expected",
+	"all_encodings_match_expected",
+]
+
+
 # Adapted from https://github.com/beeware/rubicon-objc/blob/v0.3.1/rubicon/objc/types.py#L127-L188
 # The type encoding syntax used in typedstreams is very similar,
 # but not identical,

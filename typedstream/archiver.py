@@ -9,6 +9,27 @@ from . import old_binary_plist
 from . import stream
 
 
+__all__ = [
+	"TypedGroup",
+	"TypedValue",
+	"Class",
+	"GenericArchivedObject",
+	"KnownArchivedObject",
+	"archived_classes_by_name",
+	"register_archived_class",
+	"archived_class",
+	"GenericStruct",
+	"KnownStruct",
+	"struct_classes_by_encoding",
+	"register_struct_class",
+	"struct_class",
+	"Unarchiver",
+	"unarchive_from_stream",
+	"unarchive_from_data",
+	"unarchive_from_file",
+]
+
+
 class TypedGroup(advanced_repr.AsMultilineStringBase):
 	"""Representation of a group of typed values packed together in a typedstream.
 	
