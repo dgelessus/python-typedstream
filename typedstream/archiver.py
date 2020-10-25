@@ -96,6 +96,29 @@ class TypedValue(TypedGroup):
 		yield from value_it
 
 
+class Array(advanced_repr.AsMultilineStringBase):
+	"""Representation of a primitive C array stored in a typedstream."""
+	
+	elements: typing.Sequence[typing.Any]
+	
+	def __init__(self, elements: typing.Sequence[typing.Any]) -> None:
+		super().__init__()
+		
+		self.elements = elements
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}({self.elements!r})"
+	
+	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+		if isinstance(self.elements, bytes):
+			yield f"array, {len(self.elements)} bytes: {self.elements!r}"
+		else:
+			yield f"array, {len(self.elements)} elements:"
+			for element in self.elements:
+				for line in advanced_repr.as_multiline_string(element, calling_self=self, state=state):
+					yield "\t" + line
+
+
 class Class(object):
 	"""Information about a class as it is stored at the start of objects in a typedstream."""
 	
@@ -506,10 +529,10 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 			
 			return obj
 		elif isinstance(first, stream.ByteArray):
-			return first.data
+			return Array(first.data)
 		elif isinstance(first, stream.BeginArray):
 			_, expected_element_encoding = encodings.parse_array_encoding(expected_encoding)
-			array = [self.decode_any_untyped_value(expected_element_encoding) for _ in range(first.length)]
+			array = Array([self.decode_any_untyped_value(expected_element_encoding) for _ in range(first.length)])
 			
 			end = next(self.reader)
 			if not isinstance(end, stream.EndArray):
@@ -610,17 +633,16 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 		(value,) = self.decode_values_of_types(type_encoding)
 		return value
 	
-	def decode_array(self, element_type_encoding: bytes, length: int) -> typing.Any:
-		# Actually always returns a sequence,
-		# but a more specific return type than Any makes this method annoying to use.
+	def decode_array(self, element_type_encoding: bytes, length: int) -> Array:
 		return self.decode_value_of_type(encodings.build_array_encoding(length, element_type_encoding))
 	
 	def decode_property_list(self) -> typing.Any:
 		length = self.decode_value_of_type(b"i")
 		if length < 0:
 			raise ValueError(f"Property list data length cannot be negative: {length}")
-		data = self.decode_array(b"c", length)
-		return old_binary_plist.deserialize(data)
+		data_array = self.decode_array(b"c", length)
+		assert isinstance(data_array.elements, bytes)
+		return old_binary_plist.deserialize(data_array.elements)
 	
 	def decode_all(self) -> typing.Sequence[TypedGroup]:
 		"""Decode the entire contents of the typedstream."""

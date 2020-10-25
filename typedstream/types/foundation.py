@@ -22,7 +22,9 @@ class NSData(NSObject):
 			length = unarchiver.decode_value_of_type(b"i")
 			if length < 0:
 				raise ValueError(f"NSData length cannot be negative: {length}")
-			self.data = unarchiver.decode_array(b"c", length)
+			data_array = unarchiver.decode_array(b"c", length)
+			assert isinstance(data_array.elements, bytes)
+			self.data = data_array.elements
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")
 	
