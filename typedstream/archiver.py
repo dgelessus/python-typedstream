@@ -636,13 +636,26 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 	def decode_array(self, element_type_encoding: bytes, length: int) -> Array:
 		return self.decode_value_of_type(encodings.build_array_encoding(length, element_type_encoding))
 	
-	def decode_property_list(self) -> typing.Any:
+	def decode_data_object(self) -> bytes:
+		"""Decode a data object from the typedstream.
+		
+		This method is equivalent to the Objective-C method ``-[NSUnarchiver decodeDataObject]``.
+		"""
+		
 		length = self.decode_value_of_type(b"i")
 		if length < 0:
-			raise ValueError(f"Property list data length cannot be negative: {length}")
+			raise ValueError(f"Data object length cannot be negative: {length}")
 		data_array = self.decode_array(b"c", length)
 		assert isinstance(data_array.elements, bytes)
-		return old_binary_plist.deserialize(data_array.elements)
+		return data_array.elements
+	
+	def decode_property_list(self) -> typing.Any:
+		"""Decode a property list (in old binary plist format) from the typedstream.
+		
+		This method is equivalent to the Objective-C method ``-[NSUnarchiver decodePropertyList]``.
+		"""
+		
+		return old_binary_plist.deserialize(self.decode_data_object())
 	
 	def decode_all(self) -> typing.Sequence[TypedGroup]:
 		"""Decode the entire contents of the typedstream."""

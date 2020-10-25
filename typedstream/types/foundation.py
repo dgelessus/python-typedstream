@@ -19,12 +19,7 @@ class NSData(NSObject):
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
-			length = unarchiver.decode_value_of_type(b"i")
-			if length < 0:
-				raise ValueError(f"NSData length cannot be negative: {length}")
-			data_array = unarchiver.decode_array(b"c", length)
-			assert isinstance(data_array.elements, bytes)
-			self.data = data_array.elements
+			self.data = unarchiver.decode_data_object()
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")
 	
