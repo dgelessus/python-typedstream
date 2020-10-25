@@ -78,3 +78,38 @@ class HashTable(Object, advanced_repr.AsMultilineStringBase):
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}(key_type_encoding={self.key_type_encoding!r}, value_type_encoding={self.value_type_encoding!r}, contents={self.contents!r})"
+
+
+@archiver.archived_class
+class StreamTable(HashTable):
+	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+		if class_version == 1:
+			if self.key_type_encoding != b"i":
+				raise ValueError(f"StreamTable keys must be integers, not {self.key_type_encoding!r}")
+			if self.value_type_encoding != b"!":
+				raise ValueError(f"StreamTable values must be ignored, not {self.value_type_encoding!r}")
+			
+			for key in self.contents:
+				assert self.contents[key] is None
+				key_again = unarchiver.decode_value_of_type(b"i")
+				if key != key_again:
+					raise ValueError(f"Expected to read value for key {key}, but found {key_again}")
+				self.contents[key] = unarchiver.decode_data_object()
+		else:
+			raise ValueError(f"Unsupported version: {class_version}")
+	
+	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+		if not self.contents:
+			count_desc = "empty"
+		elif len(self.contents) == 1:
+			count_desc = "1 entry:"
+		else:
+			count_desc = f"{len(self.contents)} entries:"
+		
+		yield f"{type(self).__name__}, {count_desc}"
+		
+		for key, value in self.contents.items():
+			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self, state=state))
+			yield f"\t{key!r}: " + next(value_it, "")
+			for line in value_it:
+				yield "\t" + line
