@@ -20,7 +20,7 @@ class NSData(NSObject):
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
-			length = unarchiver.decode_typed_values(b"i")
+			length = unarchiver.decode_value_of_type(b"i")
 			if length < 0:
 				raise ValueError(f"NSData length cannot be negative: {length}")
 			self.data = unarchiver.decode_array(b"c", length)
@@ -46,7 +46,7 @@ class NSDate(NSObject):
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
-			self.absolute_reference_date_offset = unarchiver.decode_typed_values(b"d")
+			self.absolute_reference_date_offset = unarchiver.decode_value_of_type(b"d")
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")
 	
@@ -67,7 +67,7 @@ class NSString(NSObject):
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 1:
-			self.value = unarchiver.decode_typed_values(b"+").decode("utf-8")
+			self.value = unarchiver.decode_value_of_type(b"+").decode("utf-8")
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")
 	
@@ -89,8 +89,8 @@ class NSValue(NSObject, advanced_repr.AsMultilineStringBase):
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
-			self.type_encoding = unarchiver.decode_typed_values(b"*")
-			self.value = unarchiver.decode_typed_values(self.type_encoding)
+			self.type_encoding = unarchiver.decode_value_of_type(b"*")
+			self.value = unarchiver.decode_value_of_type(self.type_encoding)
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")
 	
@@ -136,12 +136,12 @@ class _ArraySetBase(advanced_repr.AsMultilineStringBase):
 class NSArray(NSObject, _ArraySetBase):
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
-			count = unarchiver.decode_typed_values(b"i")
+			count = unarchiver.decode_value_of_type(b"i")
 			if count < 0:
 				raise ValueError(f"NSArray element count cannot be negative: {count}")
 			self.elements = []
 			for _ in range(count):
-				self.elements.append(unarchiver.decode_typed_values(b"@"))
+				self.elements.append(unarchiver.decode_value_of_type(b"@"))
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")
 
@@ -157,10 +157,10 @@ class NSMutableArray(NSArray):
 class NSSet(NSObject, _ArraySetBase):
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
-			count = unarchiver.decode_typed_values(b"I")
+			count = unarchiver.decode_value_of_type(b"I")
 			self.elements = []
 			for _ in range(count):
-				self.elements.append(unarchiver.decode_typed_values(b"@"))
+				self.elements.append(unarchiver.decode_value_of_type(b"@"))
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")
 
@@ -178,13 +178,13 @@ class NSDictionary(NSObject, advanced_repr.AsMultilineStringBase):
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
-			count = unarchiver.decode_typed_values(b"i")
+			count = unarchiver.decode_value_of_type(b"i")
 			if count < 0:
 				raise ValueError(f"NSDictionary element count cannot be negative: {count}")
 			self.contents = collections.OrderedDict()
 			for _ in range(count):
-				key = unarchiver.decode_typed_values(b"@")
-				value = unarchiver.decode_typed_values(b"@")
+				key = unarchiver.decode_value_of_type(b"@")
+				value = unarchiver.decode_value_of_type(b"@")
 				self.contents[key] = value
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")
@@ -309,18 +309,18 @@ class NSColor(NSObject):
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
-			self.kind = NSColor.Kind(unarchiver.decode_typed_values(b"c"))
+			self.kind = NSColor.Kind(unarchiver.decode_value_of_type(b"c"))
 			if self.kind in {NSColor.Kind.CALIBRATED_RGBA, NSColor.Kind.DEVICE_RGBA}:
-				red, green, blue, alpha = unarchiver.decode_typed_values(b"f", b"f", b"f", b"f")
+				red, green, blue, alpha = unarchiver.decode_values_of_types(b"f", b"f", b"f", b"f")
 				self.value = NSColor.RGBAValue(red, green, blue, alpha)
 			elif self.kind in {NSColor.Kind.CALIBRATED_WA, NSColor.Kind.DEVICE_WA}:
-				white, alpha = unarchiver.decode_typed_values(b"f", b"f")
+				white, alpha = unarchiver.decode_values_of_types(b"f", b"f")
 				self.value = NSColor.WAValue(white, alpha)
 			elif self.kind == NSColor.Kind.DEVICE_CMYKA:
-				cyan, magenta, yellow, black, alpha = unarchiver.decode_typed_values(b"f", b"f", b"f", b"f", b"f")
+				cyan, magenta, yellow, black, alpha = unarchiver.decode_values_of_types(b"f", b"f", b"f", b"f", b"f")
 				self.value = NSColor.CMYKAValue(cyan, magenta, yellow, black, alpha)
 			elif self.kind == NSColor.Kind.NAMED:
-				group, name, color = unarchiver.decode_typed_values(b"@", b"@", b"@")
+				group, name, color = unarchiver.decode_values_of_types(b"@", b"@", b"@")
 				if not isinstance(group, NSString):
 					raise TypeError(f"Named NSColor group name must be a NSString, not {type(group)}")
 				if not isinstance(name, NSString):
@@ -352,12 +352,12 @@ class NSFont(NSObject):
 			if not isinstance(name, str):
 				raise TypeError(f"Font name must be a string, not {type(name)}")
 			self.name = name
-			self.size = unarchiver.decode_typed_values(b"f")
+			self.size = unarchiver.decode_value_of_type(b"f")
 			self.flags_unknown = (
-				unarchiver.decode_typed_values(b"c"),
-				unarchiver.decode_typed_values(b"c"),
-				unarchiver.decode_typed_values(b"c"),
-				unarchiver.decode_typed_values(b"c"),
+				unarchiver.decode_value_of_type(b"c"),
+				unarchiver.decode_value_of_type(b"c"),
+				unarchiver.decode_value_of_type(b"c"),
+				unarchiver.decode_value_of_type(b"c"),
 			)
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")

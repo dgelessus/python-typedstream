@@ -138,9 +138,9 @@ classes are also supported, but are decoded to a generic format based on the
 typedstream data.
 
 As a result of this decoding, some low-level information from the typedstream
-is discarded and not displayed, such as object reference numbers and raw type
-encoding strings. To see this low-level information, use the read subcommand
-instead.
+is discarded and not displayed, such as raw type encoding strings in known
+classes, and object reference numbers. To see this low-level information,
+use the read subcommand instead.
 """,
 	)
 	sub_decode.add_argument("file", help="The typedstream file to read, or - for stdin.")

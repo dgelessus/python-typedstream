@@ -9,10 +9,8 @@ from . import old_binary_plist
 from . import stream
 
 
-class Group(tuple, advanced_repr.AsMultilineStringBase):
-	"""Representation of a group of values packed together in a typedstream.
-	
-	This is a slightly modified version of the standard ``tuple`` type that adds a multiline string representation.
+class TypedGroup(advanced_repr.AsMultilineStringBase):
+	"""Representation of a group of typed values packed together in a typedstream.
 	
 	Value groups in a typedstream are created by serializing multiple values with a single call to ``-[NSArchiver encodeValuesOfObjCTypes:]``.
 	This produces different serialized data than calling ``-[NSArchiver encodeValueOfObjCType:at:]`` separately for each of the values.
@@ -20,18 +18,61 @@ class Group(tuple, advanced_repr.AsMultilineStringBase):
 	followed by all of the values one immediately after another.
 	The latter serializes each value as a separate encoding/value pair.
 	
-	A :class:`Group` instance returned by :class:`Unarchiver` always contains at least two values.
-	Single values are returned directly and not wrapped in a :class:`Group` object.
+	A :class:`TypedGroup` instance returned by :class:`Unarchiver` always contains at least one value
+	(groups with exactly one value are represented using the subclass :class:`TypedValue` instead).
 	Empty groups are technically supported by the typedstream format,
 	but :class:`Unarchiver` treats them as an error,
 	as they are never used in practice.
 	"""
 	
+	encodings: typing.Sequence[bytes]
+	values: typing.Sequence[typing.Any]
+	
+	def __init__(self, encodings: typing.Sequence[bytes], values: typing.Sequence[typing.Any]) -> None:
+		super().__init__()
+		
+		self.encodings = encodings
+		self.values = values
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}(encodings={self.encodings!r}, values={self.values!r})"
+	
 	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		yield "group:"
-		for value in self:
-			for line in advanced_repr.as_multiline_string(value, calling_self=self, state=state):
+		for encoding, value in zip(self.encodings, self.values):
+			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self, state=state))
+			yield f"\ttype {encoding!r}: {next(value_it)}"
+			for line in value_it:
 				yield "\t" + line
+
+
+class TypedValue(TypedGroup):
+	"""Special case of :class:`TypedGroup` for groups that contain only a single value.
+	
+	This class provides convenient properties for accessing the group's single type encoding and value,
+	as well as cleaner string representations.
+	Single-value groups are very common,
+	so this improves usability and readability in many cases.
+	"""
+	
+	@property
+	def encoding(self) -> bytes:
+		return self.encodings[0]
+	
+	@property
+	def value(self) -> typing.Any:
+		return self.values[0]
+	
+	def __init__(self, encoding: bytes, value: typing.Any) -> None:
+		super().__init__([encoding], [value])
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__module__}.{type(self).__qualname__}(encoding={self.encoding!r}, value={self.value!r})"
+	
+	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+		value_it = iter(advanced_repr.as_multiline_string(self.value, calling_self=self, state=state))
+		yield f"type {self.encoding!r}: {next(value_it)}"
+		yield from value_it
 
 
 class Class(object):
@@ -68,9 +109,9 @@ class GenericArchivedObject(advanced_repr.AsMultilineStringBase):
 	"""
 	
 	clazz: Class
-	contents: typing.List[typing.Any]
+	contents: typing.List[TypedGroup]
 	
-	def __init__(self, clazz: Class, contents: typing.List[typing.Any]) -> None:
+	def __init__(self, clazz: Class, contents: typing.List[TypedGroup]) -> None:
 		super().__init__()
 		
 		self.clazz = clazz
@@ -473,7 +514,15 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 		else:
 			raise ValueError(f"Unexpected event at beginning of untyped value: {type(first)}")
 	
-	def decode_typed_values(self, *expected_encodings: bytes, _lookahead: typing.Any = _NO_LOOKAHEAD) -> typing.Any:
+	def decode_typed_values(self, _lookahead: typing.Any = _NO_LOOKAHEAD) -> TypedGroup:
+		"""Decode a group of typed values from the typedstream.
+		
+		The number of values in the group and their types are read dynamically from the type information in the typedstream.
+		
+		There's no Objective-C equivalent for this method -
+		``NSUnarchiver`` only supports decoding values whose types are known beforehand.
+		"""
+		
 		if _lookahead is _NO_LOOKAHEAD:
 			begin = next(self.reader)
 		else:
@@ -482,20 +531,16 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 		if not isinstance(begin, stream.BeginTypedValues):
 			raise ValueError(f"Expected BeginTypedValues, not {type(begin)}")
 		
-		if expected_encodings:
-			if not encodings.all_encodings_match_expected(begin.encodings, expected_encodings):
-				raise ValueError(f"Expected type encodings {expected_encodings}, but got type encodings {begin.encodings} in stream")
-		else:
-			# Needs to be converted to a tuple to make mypy happy
-			# (*args are implicitly typed as tuples).
-			expected_encodings = tuple(begin.encodings)
-		
+		ret: TypedGroup
 		if len(begin.encodings) == 1:
 			# Single typed values are quite common,
-			# so for convenience don't wrap them in a 1-element tuple.
-			ret = self.decode_any_untyped_value(expected_encodings[0])
+			# so use a special subclass that's more convenient to use.
+			ret = TypedValue(begin.encodings[0], self.decode_any_untyped_value(begin.encodings[0]))
 		else:
-			ret = Group(self.decode_any_untyped_value(expected) for expected in expected_encodings)
+			ret = TypedGroup(
+				begin.encodings,
+				[self.decode_any_untyped_value(encoding) for encoding in begin.encodings],
+			)
 		
 		end = next(self.reader)
 		if not isinstance(end, stream.EndTypedValues):
@@ -503,19 +548,58 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 		
 		return ret
 	
+	def decode_values_of_types(self, *type_encodings: bytes) -> typing.Sequence[typing.Any]:
+		"""Decode a group of typed values from the typedstream,
+		which must have the given type encodings.
+		
+		This method is roughly equivalent to the Objective-C method ``-[NSUnarchiver decodeValuesOfObjCTypes:]``.
+		
+		This method only supports decoding groups with known type encodings.
+		To decode values of unknown type or a group containing an unknown number of values,
+		use :func:`decode_typed_values`.
+		"""
+		
+		if not type_encodings:
+			raise TypeError("Expected at least one type encoding")
+		
+		group = self.decode_typed_values()
+		
+		if not encodings.all_encodings_match_expected(group.encodings, type_encodings):
+			raise ValueError(f"Expected type encodings {type_encodings}, but got type encodings {group.encodings} in stream")
+		
+		return group.values
+	
+	def decode_value_of_type(self, type_encoding: bytes) -> typing.Any:
+		"""Decode a single typed value from the typedstream,
+		which must have the given type encoding.
+		
+		This method is roughly equivalent to the Objective-C method ``-[NSUnarchiver decodeValueOfObjCType:at:]``.
+		
+		This method only supports decoding single values with a known type encoding.
+		To decode groups of more than one value,
+		use :func:`decode_values_of_types`.
+		To decode values of unknown type or a group containing an unknown number of values,
+		use :func:`decode_typed_values`.
+		"""
+		
+		(value,) = self.decode_values_of_types(type_encoding)
+		return value
+	
 	def decode_array(self, element_type_encoding: bytes, length: int) -> typing.Any:
 		# Actually always returns a sequence,
 		# but a more specific return type than Any makes this method annoying to use.
-		return self.decode_typed_values(encodings.build_array_encoding(length, element_type_encoding))
+		return self.decode_value_of_type(encodings.build_array_encoding(length, element_type_encoding))
 	
 	def decode_property_list(self) -> typing.Any:
-		length = self.decode_typed_values(b"i")
+		length = self.decode_value_of_type(b"i")
 		if length < 0:
 			raise ValueError(f"Property list data length cannot be negative: {length}")
 		data = self.decode_array(b"c", length)
 		return old_binary_plist.deserialize(data)
 	
-	def decode_all(self) -> typing.Sequence[typing.Any]:
+	def decode_all(self) -> typing.Sequence[TypedGroup]:
+		"""Decode the entire contents of the typedstream."""
+		
 		contents = []
 		
 		while True:
@@ -541,7 +625,10 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 		elif len(values) > 1:
 			raise ValueError(f"Archive contains {len(values)} root values (expected exactly one root value)")
 		else:
-			return values[0]
+			(root_group,) = values
+			if not isinstance(root_group, TypedValue):
+				raise ValueError(f"Archive's root value is a group of {len(root_group.values)} values (expected exactly one root value)")
+			return root_group.value
 
 
 def unarchive_from_stream(f: typing.BinaryIO) -> typing.Any:
