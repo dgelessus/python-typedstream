@@ -137,3 +137,47 @@ class StreamTable(HashTable):
 			yield f"\t{key!r}: " + next(value_it, "")
 			for line in value_it:
 				yield "\t" + line
+
+
+@archiver.archived_class
+class Storage(Object, advanced_repr.AsMultilineStringBase):
+	element_type_encoding: bytes
+	element_size: int
+	elements: typing.List[typing.Any]
+	
+	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+		if class_version == 0:
+			self.element_type_encoding, self.element_size, _, count = unarchiver.decode_values_of_types(b"*", b"i", b"i", b"i")
+			if count < 0:
+				raise ValueError(f"Storage element count cannot be negative: {count}")
+			self.elements = list(unarchiver.decode_array(self.element_type_encoding, count).elements)
+		elif class_version == 1:
+			self.element_type_encoding, self.element_size, count = unarchiver.decode_values_of_types(b"%", b"i", b"i")
+			if count < 0:
+				raise ValueError(f"Storage element count cannot be negative: {count}")
+			
+			if count > 0:
+				self.elements = list(unarchiver.decode_array(self.element_type_encoding, count).elements)
+			else:
+				# If the Storage is empty,
+				# the array isn't stored at all.
+				self.elements = []
+		else:
+			raise ValueError(f"Unsupported version: {class_version}")
+	
+	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+		if not self.elements:
+			count_desc = "empty"
+		elif len(self.elements) == 1:
+			count_desc = "1 element:"
+		else:
+			count_desc = f"{len(self.elements)} elements:"
+		
+		yield f"{type(self).__name__}, element type {self.element_type_encoding!r} ({self.element_size!r} bytes each), {count_desc}"
+		
+		for element in self.elements:
+			for line in advanced_repr.as_multiline_string(element, calling_self=self, state=state):
+				yield "\t" + line
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__name__}(element_type_encoding={self.element_type_encoding!r}, element_size={self.element_size!r}, elements={self.elements!r})"
