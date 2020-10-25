@@ -409,10 +409,10 @@ class BeginStruct(object):
 	an :class:`EndStruct` element is generated after the last struct field.
 	"""
 	
-	name: bytes
+	name: typing.Optional[bytes]
 	field_encodings: typing.Sequence[bytes]
 	
-	def __init__(self, name: bytes, field_encodings: typing.Sequence[bytes]) -> None:
+	def __init__(self, name: typing.Optional[bytes], field_encodings: typing.Sequence[bytes]) -> None:
 		super().__init__()
 		
 		self.name = name
@@ -422,7 +422,11 @@ class BeginStruct(object):
 		return f"{type(self).__module__}.{type(self).__qualname__}(name={self.name!r}, field_encodings={self.field_encodings!r})"
 	
 	def __str__(self) -> str:
-		return f"begin struct {self.name.decode('ascii', errors='backslashreplace')} (field types {self.field_encodings!r})"
+		if self.name is None:
+			decoded_name = "(no name)"
+		else:
+			decoded_name = self.name.decode("ascii", errors="backslashreplace")
+		return f"begin struct {decoded_name} (field types {self.field_encodings!r})"
 
 
 class EndStruct(object):

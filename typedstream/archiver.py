@@ -282,10 +282,10 @@ class GenericStruct(advanced_repr.AsMultilineStringBase):
 	Structs of known types are represented as instances of custom Python classes instead.
 	"""
 	
-	name: bytes
+	name: typing.Optional[bytes]
 	fields: typing.List[typing.Any]
 	
-	def __init__(self, name: bytes, fields: typing.List[typing.Any]) -> None:
+	def __init__(self, name: typing.Optional[bytes], fields: typing.List[typing.Any]) -> None:
 		super().__init__()
 		
 		self.name = name
@@ -295,7 +295,11 @@ class GenericStruct(advanced_repr.AsMultilineStringBase):
 		return f"{type(self).__module__}.{type(self).__qualname__}(name={self.name!r}, fields={self.fields!r})"
 	
 	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
-		yield f"struct {self.name.decode('ascii', errors='backslashreplace')}:"
+		if self.name is None:
+			decoded_name = "(no name)"
+		else:
+			decoded_name = self.name.decode("ascii", errors="backslashreplace")
+		yield f"struct {decoded_name}:"
 		for field_value in self.fields:
 			for line in advanced_repr.as_multiline_string(field_value, calling_self=self, state=state):
 				yield "\t" + line

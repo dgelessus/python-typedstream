@@ -8,7 +8,6 @@ __all__ = [
 	"build_array_encoding",
 	"parse_struct_encoding",
 	"build_struct_encoding",
-	"anonymize_struct_names",
 	"encoding_matches_expected",
 	"all_encodings_match_expected",
 ]
@@ -129,7 +128,7 @@ def build_array_encoding(length: int, element_type_encoding: bytes) -> bytes:
 	return b"[" + length_string + element_type_encoding + b"]"
 
 
-def parse_struct_encoding(struct_encoding: bytes) -> typing.Tuple[bytes, typing.Sequence[bytes]]:
+def parse_struct_encoding(struct_encoding: bytes) -> typing.Tuple[typing.Optional[bytes], typing.Sequence[bytes]]:
 	"""Parse an array type encoding into its name and field type encodings."""
 	
 	if not struct_encoding.startswith(b"{"):
@@ -138,16 +137,28 @@ def parse_struct_encoding(struct_encoding: bytes) -> typing.Tuple[bytes, typing.
 		raise ValueError(f"Missing closing brace in struct type encoding: {struct_encoding!r}")
 	
 	try:
-		equals_pos = struct_encoding.index(b"=")
+		# Stop searching for the equals if an opening brace
+		# (i. e. the start of another structure type encoding)
+		# is reached.
+		# This is necessary to correctly handle struct types with no name that contain a struct type with a name,
+		# such as b"{{foo=ii}}" (an unnamed struct containing a struct named "foo" containing two integers).
+		try:
+			end = struct_encoding.index(b"{", 1)
+		except ValueError:
+			end = -1
+		equals_pos = struct_encoding.index(b"=", 1, end)
 	except ValueError:
-		raise ValueError(f"Missing name in struct type encoding: {struct_encoding!r}")
+		name = None
+		field_type_encoding_string = struct_encoding[1:-1]
+	else:
+		name = struct_encoding[1:equals_pos]
+		field_type_encoding_string = struct_encoding[equals_pos+1:-1]
 	
-	name = struct_encoding[1:equals_pos]
-	field_type_encodings = list(split_encodings(struct_encoding[equals_pos+1:-1]))
+	field_type_encodings = list(split_encodings(field_type_encoding_string))
 	return name, field_type_encodings
 
 
-def build_struct_encoding(name: bytes, field_type_encodings: typing.Iterable[bytes]) -> bytes:
+def build_struct_encoding(name: typing.Optional[bytes], field_type_encodings: typing.Iterable[bytes]) -> bytes:
 	"""Build a struct type encoding from a name and field type encodings.
 	
 	.. note::
@@ -157,47 +168,39 @@ def build_struct_encoding(name: bytes, field_type_encodings: typing.Iterable[byt
 		All elements of ``field_type_encodings`` should be valid type encoding strings.
 	"""
 	
-	return b"{" + name + b"=" + join_encodings(field_type_encodings) + b"}"
-
-
-def anonymize_struct_names(encoding: bytes) -> bytes:
-	"""Anonymize the names of all structs that appear in ``encoding``,
-	i. e. replace their names with ``?``.
-	
-	Array and struct type encodings are parsed and their element/field types are anonymized recursively.
-	If ``encoding`` doesn't contain named struct types anywhere,
-	it is returned unchanged.
-	
-	This transformation is needed because struct names in typedstreams are sometimes replaced with ``?``,
-	even if the struct has a name in the headers and is not actually anonymous.
-	"""
-	
-	if encoding.startswith(b"{"):
-		name, field_type_encodings = parse_struct_encoding(encoding)
-		anonymized_field_type_encodings = [anonymize_struct_names(field_encoding) for field_encoding in field_type_encodings]
-		return build_struct_encoding(b"?", anonymized_field_type_encodings)
-	elif encoding.startswith(b"["):
-		length, element_type_encoding = parse_array_encoding(encoding)
-		anonymized_element_type_encoding = anonymize_struct_names(element_type_encoding)
-		return build_array_encoding(length, anonymized_element_type_encoding)
+	field_type_encoding_string = join_encodings(field_type_encodings)
+	if name is None:
+		return b"{" + field_type_encoding_string + b"}"
 	else:
-		return encoding
+		return b"{" + name + b"=" + field_type_encoding_string + b"}"
 
 
 def encoding_matches_expected(actual_encoding: bytes, expected_encoding: bytes) -> bool:
 	"""Check whether ``actual_encoding`` matches ``expected_encoding``,
-	accounting for struct names in ``actual_encoding`` possibly being anonymized.
+	accounting for struct names in ``actual_encoding`` possibly being missing.
 	"""
 	
-	return (
-		actual_encoding == expected_encoding
-		or actual_encoding == anonymize_struct_names(expected_encoding)
-	)
+	if actual_encoding.startswith(b"{") and expected_encoding.startswith(b"{"):
+		actual_name, actual_field_type_encodings = parse_struct_encoding(actual_encoding)
+		expected_name, expected_field_type_encodings = parse_struct_encoding(expected_encoding)
+		return (
+			(actual_name in {None, b"?"} or actual_name == expected_name)
+			and all_encodings_match_expected(actual_field_type_encodings, expected_field_type_encodings)
+		)
+	elif actual_encoding.startswith(b"[") and expected_encoding.startswith(b"["):
+		actual_length, actual_element_type_encoding = parse_array_encoding(actual_encoding)
+		expected_length, expected_element_type_encoding = parse_array_encoding(expected_encoding)
+		return (
+			actual_length == expected_length
+			and encoding_matches_expected(actual_element_type_encoding, expected_element_type_encoding)
+		)
+	else:
+		return actual_encoding == expected_encoding
 
 
 def all_encodings_match_expected(actual_encodings: typing.Sequence[bytes], expected_encodings: typing.Sequence[bytes]) -> bool:
 	"""Check whether all of ``actual_encodings`` match ``expected_encodings``,
-	accounting for struct names in ``actual_encodings`` possibly being anonymized.
+	accounting for struct names in ``actual_encodings`` possibly being missing.
 	
 	If ``actual_encodings`` and ``expected_encodings`` don't have the same length,
 	they are considered to be not matching.
