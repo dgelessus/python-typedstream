@@ -82,6 +82,28 @@ class HashTable(Object, advanced_repr.AsMultilineStringBase):
 
 @archiver.archived_class
 class StreamTable(HashTable):
+	class _UnarchivedContents(typing.Mapping[int, typing.Any]):
+		archived_contents: typing.Mapping[int, bytes]
+		
+		def __init__(self, archived_contents: typing.Mapping[int, bytes]) -> None:
+			super().__init__()
+			
+			self.archived_contents = archived_contents
+		
+		def __len__(self) -> int:
+			return len(self.archived_contents)
+		
+		def __iter__(self) -> typing.Iterator[typing.Any]:
+			return iter(self.archived_contents)
+		
+		def keys(self) -> typing.AbstractSet[int]:
+			return self.archived_contents.keys()
+		
+		def __getitem__(self, key: int) -> typing.Any:
+			return archiver.unarchive_from_data(self.archived_contents[key])
+	
+	unarchived_contents: "collections.Mapping[int, typing.Any]"
+	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 1:
 			if self.key_type_encoding != b"i":
@@ -95,20 +117,22 @@ class StreamTable(HashTable):
 				if key != key_again:
 					raise ValueError(f"Expected to read value for key {key}, but found {key_again}")
 				self.contents[key] = unarchiver.decode_data_object()
+			
+			self.unarchived_contents = StreamTable._UnarchivedContents(self.contents)
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")
 	
 	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
-		if not self.contents:
+		if not self.unarchived_contents:
 			count_desc = "empty"
-		elif len(self.contents) == 1:
+		elif len(self.unarchived_contents) == 1:
 			count_desc = "1 entry:"
 		else:
-			count_desc = f"{len(self.contents)} entries:"
+			count_desc = f"{len(self.unarchived_contents)} entries:"
 		
 		yield f"{type(self).__name__}, {count_desc}"
 		
-		for key, value in self.contents.items():
+		for key, value in self.unarchived_contents.items():
 			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self, state=state))
 			yield f"\t{key!r}: " + next(value_it, "")
 			for line in value_it:
