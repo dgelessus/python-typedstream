@@ -82,10 +82,10 @@ class HashTable(Object, advanced_repr.AsMultilineStringBase):
 
 @archiver.archived_class
 class StreamTable(HashTable):
-	class _UnarchivedContents(typing.Mapping[int, typing.Any]):
-		archived_contents: typing.Mapping[int, bytes]
+	class _UnarchivedContents(typing.Mapping[typing.Any, typing.Any]):
+		archived_contents: typing.Mapping[typing.Any, bytes]
 		
-		def __init__(self, archived_contents: typing.Mapping[int, bytes]) -> None:
+		def __init__(self, archived_contents: typing.Mapping[typing.Any, bytes]) -> None:
 			super().__init__()
 			
 			self.archived_contents = archived_contents
@@ -96,24 +96,22 @@ class StreamTable(HashTable):
 		def __iter__(self) -> typing.Iterator[typing.Any]:
 			return iter(self.archived_contents)
 		
-		def keys(self) -> typing.AbstractSet[int]:
+		def keys(self) -> typing.AbstractSet[typing.Any]:
 			return self.archived_contents.keys()
 		
-		def __getitem__(self, key: int) -> typing.Any:
+		def __getitem__(self, key: typing.Any) -> typing.Any:
 			return archiver.unarchive_from_data(self.archived_contents[key])
 	
-	unarchived_contents: "collections.Mapping[int, typing.Any]"
+	unarchived_contents: "collections.Mapping[typing.Any, typing.Any]"
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
 		if class_version == 1:
-			if self.key_type_encoding != b"i":
-				raise ValueError(f"StreamTable keys must be integers, not {self.key_type_encoding!r}")
 			if self.value_type_encoding != b"!":
 				raise ValueError(f"StreamTable values must be ignored, not {self.value_type_encoding!r}")
 			
 			for key in self.contents:
 				assert self.contents[key] is None
-				key_again = unarchiver.decode_value_of_type(b"i")
+				key_again = unarchiver.decode_value_of_type(self.key_type_encoding)
 				if key != key_again:
 					raise ValueError(f"Expected to read value for key {key}, but found {key_again}")
 				self.contents[key] = unarchiver.decode_data_object()
