@@ -348,7 +348,7 @@ class GenericStruct(advanced_repr.AsMultilineStringBase):
 _KS = typing.TypeVar("_KS", bound="KnownStruct")
 
 
-class KnownStruct(metaclass=abc.ABCMeta):
+class KnownStruct(object):
 	struct_name: typing.ClassVar[bytes]
 	field_encodings: typing.ClassVar[typing.Sequence[bytes]]
 	encoding: typing.ClassVar[bytes]
