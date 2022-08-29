@@ -19,11 +19,16 @@ import enum
 import io
 import os
 import struct
+import sys
 import types
 import typing
 
-
 from . import encodings
+
+if sys.version_info < (3, 8):
+	from typing_extensions import Literal
+else:
+	from typing import Literal
 
 
 __all__ = [
@@ -83,7 +88,7 @@ _SIGNATURE_LITTLE_ENDIAN = b"streamtyped"
 assert len(_SIGNATURE_BIG_ENDIAN) == len(_SIGNATURE_LITTLE_ENDIAN)
 _SIGNATURE_LENGTH = len(_SIGNATURE_BIG_ENDIAN)
 
-_SIGNATURE_TO_BYTE_ORDER_MAP = {
+_SIGNATURE_TO_BYTE_ORDER_MAP: typing.Mapping[bytes, Literal["little", "big"]] = {
 	_SIGNATURE_BIG_ENDIAN: "big",
 	_SIGNATURE_LITTLE_ENDIAN: "little",
 }
@@ -473,7 +478,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 	shared_string_table: typing.List[bytes]
 	
 	streamer_version: int
-	byte_order: str
+	byte_order: Literal["little", "big"]
 	system_version: int
 	
 	_events_iterator: typing.Iterator[ReadEvent]

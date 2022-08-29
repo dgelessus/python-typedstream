@@ -113,7 +113,7 @@ class StreamTable(HashTable):
 		def __iter__(self) -> typing.Iterator[typing.Any]:
 			return iter(self.archived_contents)
 		
-		def keys(self) -> typing.AbstractSet[typing.Any]:
+		def keys(self) -> typing.KeysView[typing.Any]:
 			return self.archived_contents.keys()
 		
 		def __getitem__(self, key: typing.Any) -> typing.Any:

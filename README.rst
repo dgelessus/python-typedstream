@@ -52,7 +52,9 @@ Requirements
 ------------
 
 Python 3.6 or later.
-No other libraries are required.
+No other libraries are required,
+except that before Python 3.8,
+the ``typing_extensions`` library is needed.
 
 Installation
 ------------
