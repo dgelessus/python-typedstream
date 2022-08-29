@@ -9,7 +9,7 @@ jobs:
           - platform: ubuntu-latest
             python-min: "3.6"
           - platform: windows-latest
-            python-min: "3.6"
+            python-min: "3.7"
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v2
