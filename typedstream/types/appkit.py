@@ -18,6 +18,7 @@
 import enum
 import typing
 
+from .. import advanced_repr
 from .. import archiver
 from . import foundation
 
@@ -198,6 +199,31 @@ class NSColor(foundation.NSObject):
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}(kind={self.kind.name}, value={self.value!r})"
+
+
+@archiver.archived_class
+class NSCustomObject(foundation.NSObject, advanced_repr.AsMultilineStringBase):
+	class_name: str
+	object: typing.Any
+	
+	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+		if class_version == 41:
+			class_name, obj = unarchiver.decode_values_of_types(b"@", b"@")
+			if not isinstance(class_name, foundation.NSString):
+				raise TypeError(f"Class name must be a NSString, not {type(class_name)}")
+			self.class_name = class_name.value
+			self.object = obj
+		else:
+			raise ValueError(f"Unsuppored version: {class_version}")
+	
+	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+		it = iter(advanced_repr.as_multiline_string(self.object, calling_self=self, state=state))
+		yield f"{type(self).__name__}, class {self.class_name}, object: " + next(it, "")
+		for line in it:
+			yield "\t" + line
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__name__}(class_name={self.class_name!r}, object={self.object!r})"
 
 
 @archiver.archived_class
