@@ -259,7 +259,7 @@ class NSFont(foundation.NSObject):
 class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	root: typing.Any
 	object_parents: "collections.OrderedDict[typing.Any, typing.Any]"
-	object_names: "collections.OrderedDict[typing.Any, str]"
+	object_names: "collections.OrderedDict[typing.Any, typing.Optional[str]]"
 	unknown_set: typing.Any
 	connections: typing.List[typing.Any]
 	unknown_object: typing.Any
@@ -287,9 +287,15 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			obj, name = unarchiver.decode_values_of_types(b"@", b"@")
 			if obj in self.object_names:
 				raise ValueError(f"Duplicate object name entry {i} - this object already has a name")
-			if not isinstance(name, foundation.NSString):
-				raise TypeError(f"Object name must be a NSString, not {type(name)}")
-			self.object_names[obj] = name.value
+			if name is None:
+				# Sometimes the name is nil.
+				# No idea if this has any special significance
+				# or if it behaves any different than having no name entry at all.
+				self.object_names[obj] = None
+			elif isinstance(name, foundation.NSString):
+				self.object_names[obj] = name.value
+			else:
+				raise TypeError(f"Object name must be a NSString or nil, not {type(name)}")
 		
 		self.unknown_set = unarchiver.decode_value_of_type(b"@")
 		
