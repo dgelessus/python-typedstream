@@ -339,35 +339,77 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		
 		return f"{self._oid_repr(obj)} ({desc})"
 	
+	def _render_tree(self, obj: typing.Any, children: typing.Mapping[typing.Any, typing.Any], seen: typing.Set[typing.Any]) -> typing.Iterable[str]:
+		yield self._object_desc(obj)
+		seen.add(obj)
+		for child in children.get(obj, []):
+			if child in seen:
+				yield f"\tWARNING: object appears more than once in tree: {self._object_desc(obj)}"
+			else:
+				for line in self._render_tree(child, children, seen):
+					yield "\t" + line
+	
 	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		yield f"{type(self).__name__}, target framework {self.target_framework!r}:"
 		
+		children = collections.defaultdict(list)
+		for child, parent in self.object_parents.items():
+			children[parent].append(child)
+		
+		for cs in children.values():
+			cs.sort(key=lambda o: self.object_ids.get(o, 0))
+		
+		seen_in_tree: typing.Set[typing.Any] = set()
+		tree_it = iter(self._render_tree(self.root, children, seen_in_tree))
+		yield f"\tobject tree: {next(tree_it)}"
+		for line in tree_it:
+			yield "\t" + line
+		
+		missed_parents = set(children) - seen_in_tree
+		if missed_parents:
+			yield "\tWARNING: one or more parent objects not reachable from root:"
+			for obj in missed_parents:
+				yield f"\t\t{self._object_desc(obj)} has children:"
+				for child in children[obj]:
+					yield f"\t\t\t{self._object_desc(child)}"
+		
+		missed_names = set(self.object_names) - seen_in_tree
+		if missed_names:
+			yield "\tWARNING: one or more named objects not reachable from root:"
+			for obj in missed_names:
+				yield f"\t\t{self._object_desc(obj)}"
+		
+		yield f"\t{len(self.connections)} connections:"
+		for connection in self.connections:
+			yield f"\t\t{self._object_desc(connection)}"
+		
+		missed_objects = set(self.object_ids) - seen_in_tree - set(self.connections)
+		if missed_objects:
+			yield "\tWARNING: one or more objects not reachable from root or connections:"
+			for obj in missed_objects:
+				yield f"\t\t{self._object_desc(obj)}"
+		
 		yield f"\t{len(self.object_ids)} objects:"
 		for obj, oid in self.object_ids.items():
+			oid_desc = f"#{oid}"
+			try:
+				name = self.object_names[obj]
+			except KeyError:
+				pass
+			else:
+				oid_desc += f" {name!r}"
+			
 			obj_it = iter(advanced_repr.as_multiline_string(obj, calling_self=self, state=state))
-			yield f"\t\t#{oid}: {next(obj_it)}"
+			yield f"\t\t{oid_desc}: {next(obj_it)}"
 			for line in obj_it:
 				yield "\t\t" + line
 		
 		yield f"\tnext object ID: #{self.next_object_id}"
-		yield f"\troot object: {self._object_desc(self.root)}"
-		
-		yield f"\t{len(self.object_parents)} object parents:"
-		for child, parent in self.object_parents.items():
-			yield f"\t\t{self._object_desc(child)} --> parent {self._object_desc(parent)}"
-		
-		yield f"\t{len(self.object_names)} object names:"
-		for obj in self.object_names:
-			yield f"\t\t{self._object_desc(obj)}" # _object_desc includes the object name
 		
 		unknown_set_it = iter(advanced_repr.as_multiline_string(self.unknown_set, calling_self=self, state=state))
 		yield f"\tunknown set: {next(unknown_set_it)}"
 		for line in unknown_set_it:
 			yield "\t" + line
-		
-		yield f"\t{len(self.connections)} connections:"
-		for connection in self.connections:
-			yield f"\t\t{self._object_desc(connection)}"
 		
 		unknown_object_it = iter(advanced_repr.as_multiline_string(self.unknown_object, calling_self=self, state=state))
 		yield f"\tunknown object: {next(unknown_object_it)}"
