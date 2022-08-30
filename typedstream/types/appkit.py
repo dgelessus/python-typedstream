@@ -15,11 +15,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
+import collections
 import enum
 import typing
 
 from .. import advanced_repr
 from .. import archiver
+from . import _common
 from . import foundation
 
 
@@ -251,3 +253,131 @@ class NSFont(foundation.NSObject):
 	def __repr__(self) -> str:
 		flags_repr = ", ".join([f"0x{flag:>02x}" for flag in self.flags_unknown])
 		return f"{type(self).__name__}(name={self.name!r}, size={self.size!r}, flags_unknown=({flags_repr}))"
+
+
+@archiver.archived_class
+class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
+	root: typing.Any
+	object_parents: "collections.OrderedDict[typing.Any, typing.Any]"
+	object_names: "collections.OrderedDict[typing.Any, str]"
+	unknown_set: typing.Any
+	connections: typing.List[typing.Any]
+	unknown_object: typing.Any
+	object_ids: "collections.OrderedDict[typing.Any, int]"
+	next_object_id: int
+	target_framework: str
+	
+	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+		if class_version == 224:
+			self.root = unarchiver.decode_value_of_type(b"@")
+			
+			parents_count = unarchiver.decode_value_of_type(b"i")
+			self.object_parents = collections.OrderedDict()
+			for i in range(parents_count):
+				child, parent = unarchiver.decode_values_of_types(b"@", b"@")
+				if child in self.object_parents:
+					raise ValueError(f"Duplicate object parent entry {i} - this object already has a parent")
+				self.object_parents[child] = parent
+			
+			names_count = unarchiver.decode_value_of_type(b"i")
+			self.object_names = collections.OrderedDict()
+			for i in range(names_count):
+				obj, name = unarchiver.decode_values_of_types(b"@", b"@")
+				if obj in self.object_names:
+					raise ValueError(f"Duplicate object name entry {i} - this object already has a name")
+				if not isinstance(name, foundation.NSString):
+					raise TypeError(f"Object name must be a NSString, not {type(name)}")
+				self.object_names[obj] = name.value
+			
+			self.unknown_set = unarchiver.decode_value_of_type(b"@")
+			
+			connections = unarchiver.decode_value_of_type(b"@")
+			if not isinstance(connections, foundation.NSArray):
+				raise TypeError(f"Connetions must be a NSArray, not {type(connections)}")
+			self.connections = connections.elements
+			
+			self.unknown_object = unarchiver.decode_value_of_type(b"@")
+			
+			oids_count = unarchiver.decode_value_of_type(b"i")
+			self.object_ids = collections.OrderedDict()
+			for i in range(oids_count):
+				obj, oid = unarchiver.decode_values_of_types(b"@", b"i")
+				if obj in self.object_ids:
+					raise ValueError(f"Duplicate object ID entry {i} - this object already has an ID")
+				self.object_ids[obj] = oid
+			
+			self.next_object_id = unarchiver.decode_value_of_type(b"i")
+			
+			unknown_int = unarchiver.decode_value_of_type(b"i")
+			if unknown_int != 0:
+				raise ValueError(f"Unknown int field is not 0: {unknown_int}")
+			
+			target_framework = unarchiver.decode_value_of_type(b"@")
+			if not isinstance(target_framework, foundation.NSString):
+				raise TypeError(f"Target framework must be a NSString, not {type(target_framework)}")
+			self.target_framework = target_framework.value
+		else:
+			raise ValueError(f"Unsupported version: {class_version}")
+	
+	def _oid_repr(self, obj: typing.Any) -> str:
+		try:
+			oid = self.object_ids[obj]
+		except KeyError:
+			return "<missing OID!>"
+		else:
+			return f"#{oid}"
+	
+	def _object_desc(self, obj: typing.Any) -> str:
+		desc = _common.object_class_name(obj)
+		
+		try:
+			name = self.object_names[obj]
+		except KeyError:
+			pass
+		else:
+			desc += f" {name!r}"
+		
+		return f"{self._oid_repr(obj)} ({desc})"
+	
+	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+		yield f"{type(self).__name__}, target framework {self.target_framework!r}:"
+		
+		yield f"\t{len(self.object_ids)} objects:"
+		for obj, oid in self.object_ids.items():
+			obj_it = iter(advanced_repr.as_multiline_string(obj, calling_self=self, state=state))
+			yield f"\t\t#{oid}: {next(obj_it)}"
+			for line in obj_it:
+				yield "\t\t" + line
+		
+		yield f"\tnext object ID: #{self.next_object_id}"
+		yield f"\troot object: {self._object_desc(self.root)}"
+		
+		yield f"\t{len(self.object_parents)} object parents:"
+		for child, parent in self.object_parents.items():
+			yield f"\t\t{self._object_desc(child)} --> parent {self._object_desc(parent)}"
+		
+		yield f"\t{len(self.object_names)} object names:"
+		for obj in self.object_names:
+			yield f"\t\t{self._object_desc(obj)}" # _object_desc includes the object name
+		
+		unknown_set_it = iter(advanced_repr.as_multiline_string(self.unknown_set, calling_self=self, state=state))
+		yield f"\tunknown set: {next(unknown_set_it)}"
+		for line in unknown_set_it:
+			yield "\t" + line
+		
+		yield f"\t{len(self.connections)} connections:"
+		for connection in self.connections:
+			yield f"\t\t{self._object_desc(connection)}"
+		
+		unknown_object_it = iter(advanced_repr.as_multiline_string(self.unknown_object, calling_self=self, state=state))
+		yield f"\tunknown object: {next(unknown_object_it)}"
+		for line in unknown_object_it:
+			yield "\t" + line
+	
+	def __repr__(self) -> str:
+		object_parents_repr = "{" + ", ".join(f"{self._oid_repr(child)}: {self._oid_repr(parent)}" for child, parent in self.object_parents.items()) + "}"
+		object_names_repr = "{" + ", ".join(f"{self._oid_repr(obj)}: {name!r}" for obj, name in self.object_names.items()) + "}"
+		connections_repr = "[" + ", ".join(f"{self._oid_repr(connection)}" for connection in self.connections) + "]"
+		object_ids_repr = "{" + ", ".join(f"<{_common.object_class_name(obj)}>: {oid}" for obj, oid in self.object_ids.items()) + "}"
+		
+		return f"<{type(self).__name__}: root={self._oid_repr(self.root)}, object_parents={object_parents_repr}, object_names={object_names_repr}, unknown_set={self.unknown_set!r}, connections={connections_repr}, unknown_object={self.unknown_object!r}, object_ids={object_ids_repr}, next_object_id={self.next_object_id}, target_framework={self.target_framework!r}>"

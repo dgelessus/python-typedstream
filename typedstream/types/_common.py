@@ -18,6 +18,16 @@
 import typing
 
 from .. import advanced_repr
+from .. import archiver
+
+
+def object_class_name(obj: typing.Any) -> str:
+	if isinstance(obj, archiver.GenericArchivedObject):
+		return obj.clazz.name.decode("ascii", errors="backslashreplace")
+	elif isinstance(obj, archiver.KnownArchivedObject):
+		return type(obj).archived_name.decode("ascii", errors="backslashreplace")
+	else:
+		return type(obj).__name__
 
 
 class ArraySetBase(advanced_repr.AsMultilineStringBase):
