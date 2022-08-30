@@ -36,10 +36,10 @@ class NSData(NSObject):
 	data: bytes
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
-		if class_version == 0:
-			self.data = unarchiver.decode_data_object()
-		else:
+		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
+		
+		self.data = unarchiver.decode_data_object()
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}({self.data!r})"
@@ -59,10 +59,10 @@ class NSDate(NSObject):
 	absolute_reference_date_offset: float
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
-		if class_version == 0:
-			self.absolute_reference_date_offset = unarchiver.decode_value_of_type(b"d")
-		else:
+		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
+		
+		self.absolute_reference_date_offset = unarchiver.decode_value_of_type(b"d")
 	
 	@property
 	def value(self) -> datetime.datetime:
@@ -80,10 +80,10 @@ class NSString(NSObject):
 	value: str
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
-		if class_version == 1:
-			self.value = unarchiver.decode_value_of_type(b"+").decode("utf-8")
-		else:
+		if class_version != 1:
 			raise ValueError(f"Unsupported version: {class_version}")
+		
+		self.value = unarchiver.decode_value_of_type(b"+").decode("utf-8")
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}({self.value!r})"
@@ -102,11 +102,11 @@ class NSValue(NSObject, advanced_repr.AsMultilineStringBase):
 	value: typing.Any
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
-		if class_version == 0:
-			self.type_encoding = unarchiver.decode_value_of_type(b"*")
-			self.value = unarchiver.decode_value_of_type(self.type_encoding)
-		else:
+		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
+		
+		self.type_encoding = unarchiver.decode_value_of_type(b"*")
+		self.value = unarchiver.decode_value_of_type(self.type_encoding)
 	
 	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		value_it = iter(advanced_repr.as_multiline_string(self.value, calling_self=self, state=state))
@@ -128,15 +128,15 @@ class NSNumber(NSValue):
 @archiver.archived_class
 class NSArray(NSObject, _common.ArraySetBase):
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
-		if class_version == 0:
-			count = unarchiver.decode_value_of_type(b"i")
-			if count < 0:
-				raise ValueError(f"NSArray element count cannot be negative: {count}")
-			self.elements = []
-			for _ in range(count):
-				self.elements.append(unarchiver.decode_value_of_type(b"@"))
-		else:
+		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
+		
+		count = unarchiver.decode_value_of_type(b"i")
+		if count < 0:
+			raise ValueError(f"NSArray element count cannot be negative: {count}")
+		self.elements = []
+		for _ in range(count):
+			self.elements.append(unarchiver.decode_value_of_type(b"@"))
 
 
 @archiver.archived_class
@@ -149,13 +149,13 @@ class NSMutableArray(NSArray):
 @archiver.archived_class
 class NSSet(NSObject, _common.ArraySetBase):
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
-		if class_version == 0:
-			count = unarchiver.decode_value_of_type(b"I")
-			self.elements = []
-			for _ in range(count):
-				self.elements.append(unarchiver.decode_value_of_type(b"@"))
-		else:
+		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
+		
+		count = unarchiver.decode_value_of_type(b"I")
+		self.elements = []
+		for _ in range(count):
+			self.elements.append(unarchiver.decode_value_of_type(b"@"))
 
 
 @archiver.archived_class
@@ -170,17 +170,17 @@ class NSDictionary(NSObject, advanced_repr.AsMultilineStringBase):
 	contents: "collections.OrderedDict[typing.Any, typing.Any]"
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
-		if class_version == 0:
-			count = unarchiver.decode_value_of_type(b"i")
-			if count < 0:
-				raise ValueError(f"NSDictionary element count cannot be negative: {count}")
-			self.contents = collections.OrderedDict()
-			for _ in range(count):
-				key = unarchiver.decode_value_of_type(b"@")
-				value = unarchiver.decode_value_of_type(b"@")
-				self.contents[key] = value
-		else:
+		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
+		
+		count = unarchiver.decode_value_of_type(b"i")
+		if count < 0:
+			raise ValueError(f"NSDictionary element count cannot be negative: {count}")
+		self.contents = collections.OrderedDict()
+		for _ in range(count):
+			key = unarchiver.decode_value_of_type(b"@")
+			value = unarchiver.decode_value_of_type(b"@")
+			self.contents[key] = value
 	
 	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		if not self.contents:

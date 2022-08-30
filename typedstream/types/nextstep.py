@@ -122,20 +122,20 @@ class StreamTable(HashTable):
 	unarchived_contents: "collections.Mapping[typing.Any, typing.Any]"
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
-		if class_version == 1:
-			if self.value_type_encoding != b"!":
-				raise ValueError(f"StreamTable values must be ignored, not {self.value_type_encoding!r}")
-			
-			for key in self.contents:
-				assert self.contents[key] is None
-				key_again = unarchiver.decode_value_of_type(self.key_type_encoding)
-				if key != key_again:
-					raise ValueError(f"Expected to read value for key {key}, but found {key_again}")
-				self.contents[key] = unarchiver.decode_data_object()
-			
-			self.unarchived_contents = StreamTable._UnarchivedContents(self.contents)
-		else:
+		if class_version != 1:
 			raise ValueError(f"Unsupported version: {class_version}")
+		
+		if self.value_type_encoding != b"!":
+			raise ValueError(f"StreamTable values must be ignored, not {self.value_type_encoding!r}")
+		
+		for key in self.contents:
+			assert self.contents[key] is None
+			key_again = unarchiver.decode_value_of_type(self.key_type_encoding)
+			if key != key_again:
+				raise ValueError(f"Expected to read value for key {key}, but found {key_again}")
+			self.contents[key] = unarchiver.decode_data_object()
+		
+		self.unarchived_contents = StreamTable._UnarchivedContents(self.contents)
 	
 	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		if not self.unarchived_contents:
