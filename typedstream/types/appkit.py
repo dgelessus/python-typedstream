@@ -429,3 +429,32 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		object_ids_repr = "{" + ", ".join(f"<{_common.object_class_name(obj)}>: {oid}" for obj, oid in self.object_ids.items()) + "}"
 		
 		return f"<{type(self).__name__}: root={self._oid_repr(self.root)}, object_parents={object_parents_repr}, object_names={object_names_repr}, unknown_set={self.unknown_set!r}, connections={connections_repr}, unknown_object={self.unknown_object!r}, object_ids={object_ids_repr}, next_object_id={self.next_object_id}, target_framework={self.target_framework!r}>"
+
+
+@archiver.archived_class
+class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
+	next_responder: typing.Any
+	
+	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+		if class_version != 0:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		next_responder = unarchiver.decode_value_of_type(b"@")
+		if next_responder is not None and not isinstance(next_responder, NSResponder):
+			raise TypeError(f"Next responder must be a NSResponder or nil, not {type(next_responder)}")
+		self.next_responder = next_responder
+	
+	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+		yield f"{type(self).__name__}:"
+		if self.next_responder is None:
+			next_responder_desc = "None"
+		else:
+			next_responder_desc = f"<{_common.object_class_name(self.next_responder)}>"
+		yield f"\tnext responder: {next_responder_desc}"
+	
+	def __repr__(self) -> str:
+		if self.next_responder is None:
+			next_responder_desc = "None"
+		else:
+			next_responder_desc = f"<{_common.object_class_name(self.next_responder)}>"
+		return f"{type(self).__name__}(next_responder={next_responder_desc})"
