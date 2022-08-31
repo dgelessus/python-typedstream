@@ -167,19 +167,25 @@ class GenericArchivedObject(advanced_repr.AsMultilineStringBase):
 	
 	This class is only used for archived objects whose class is not known.
 	Objects of known classes are represented as instances of custom Python classes instead.
+	If an object's class is not known,
+	but one of its superclasses is,
+	then the known part of the object is represented as that known class
+	and only the remaining contents are stored in the generic format.
 	"""
 	
 	clazz: Class
+	super_object: "typing.Optional[KnownArchivedObject]"
 	contents: typing.List[TypedGroup]
 	
-	def __init__(self, clazz: Class, contents: typing.List[TypedGroup]) -> None:
+	def __init__(self, clazz: Class, super_object: "typing.Optional[KnownArchivedObject]", contents: typing.List[TypedGroup]) -> None:
 		super().__init__()
 		
 		self.clazz = clazz
+		self.super_object = super_object
 		self.contents = contents
 	
 	def __repr__(self) -> str:
-		return f"{type(self).__module__}.{type(self).__qualname__}(clazz={self.clazz!r}, contents={self.contents!r})"
+		return f"{type(self).__module__}.{type(self).__qualname__}(clazz={self.clazz!r}, super_object={self.super_object!r}, contents={self.contents!r})"
 	
 	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		first = f"object of class {self.clazz}"
@@ -187,10 +193,15 @@ class GenericArchivedObject(advanced_repr.AsMultilineStringBase):
 			yield first + " (circular reference)"
 		elif id(self) in state.already_rendered_ids:
 			yield first + " (backreference)"
-		elif not self.contents:
+		elif self.super_object is None and not self.contents:
 			yield first + ", no contents"
 		else:
 			yield first + ", contents:"
+			if self.super_object is not None:
+				super_object_it = iter(advanced_repr.as_multiline_string(self.super_object, calling_self=self, state=state))
+				yield f"\tsuper object: {next(super_object_it)}"
+				for line in super_object_it:
+					yield "\t" + line
 			for value in self.contents:
 				for line in advanced_repr.as_multiline_string(value, calling_self=self, state=state):
 					yield "\t" + line
@@ -521,28 +532,57 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 			# Try to look up a known custom Python class for the archived class and create an instance of it.
 			# If no custom class is known for the archived class,
 			# create a generic object instead.
+			python_class: typing.Optional[typing.Type[KnownArchivedObject]]
+			superclass: typing.Optional[Class]
+			known_obj: typing.Optional[KnownArchivedObject]
 			obj: typing.Union[GenericArchivedObject, KnownArchivedObject]
 			try:
 				python_class = archived_classes_by_name[archived_class.name]
 			except KeyError:
-				obj = GenericArchivedObject(archived_class, [])
+				# If the archived class itself is not known,
+				# try to find one of its superclasses instead
+				# so that at least part of the object can be decoded properly.
+				superclass = archived_class.superclass
+				while superclass is not None:
+					try:
+						python_class = archived_classes_by_name[superclass.name]
+					except KeyError:
+						pass
+					else:
+						break
+					superclass = superclass.superclass
+				else:
+					python_class = None
+				
+				if python_class is None:
+					known_obj = None
+				else:
+					known_obj = python_class()
+				obj = GenericArchivedObject(archived_class, known_obj, [])
 			else:
-				obj = python_class()
+				superclass = archived_class
+				obj = known_obj = python_class()
 			
 			# Now that the object is created,
 			# replace the placeholder in the shared object table with the real object.
 			self.shared_object_table[placeholder_index] = (stream.ObjectReference.Type.OBJECT, obj)
 			
+			if known_obj is not None:
+				known_obj.init_from_unarchiver(self, superclass)
+			
+			next_event = next(self.reader)
 			if isinstance(obj, GenericArchivedObject):
-				next_event = next(self.reader)
+				# At least part of the object is not known,
+				# so there may be extra trailing data
+				# that should be stored in the generic part of the object.
 				while not isinstance(next_event, stream.EndObject):
 					obj.contents.append(self.decode_typed_values(_lookahead=next_event))
 					next_event = next(self.reader)
 			else:
-				obj.init_from_unarchiver(self, archived_class)
-				end = next(self.reader)
-				if not isinstance(end, stream.EndObject):
-					raise ValueError(f"Expected EndObject, not {type(end)}")
+				# The object's exact class is fully known,
+				# so there shouldn't be any extra data at the end of the object.
+				if not isinstance(next_event, stream.EndObject):
+					raise ValueError(f"Expected EndObject after fully known archived object, not {type(next_event)}")
 			
 			return obj
 		elif isinstance(first, stream.ByteArray):
