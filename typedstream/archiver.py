@@ -207,7 +207,22 @@ class GenericArchivedObject(advanced_repr.AsMultilineStringBase):
 					yield "\t" + line
 
 
-class KnownArchivedObject(metaclass=abc.ABCMeta):
+class _KnownArchivedClass(abc.ABCMeta):
+	"""Metaclass for :class:`KnownArchivedObject`."""
+	
+	def __instancecheck__(self, instance: typing.Any) -> bool:
+		"""Adds a special case for :class:`GenericArchivedObject`:
+		if its :attr:`~GenericArchivedObject.super_object` is an instance of this class,
+		then the entire :class:`GenericArchivedObject` is also considered an instance of this class.
+		
+		This simplifies isinstance checks in unarchiving methods
+		where objects might have an unknown concrete class with a known superclass.
+		"""
+		
+		return super().__instancecheck__(instance) or (isinstance(instance, GenericArchivedObject) and isinstance(instance.super_object, self))
+
+
+class KnownArchivedObject(metaclass=_KnownArchivedClass):
 	# archived_name is set by __init_subclass__ on each subclass.
 	archived_name: typing.ClassVar[bytes]
 	
