@@ -458,3 +458,79 @@ class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		else:
 			next_responder_desc = f"<{_common.object_class_name(self.next_responder)}>"
 		return f"{type(self).__name__}(next_responder={next_responder_desc})"
+
+
+@archiver.archived_class
+class NSView(NSResponder):
+	subviews: typing.List[typing.Any]
+	frame: NSRect
+	bounds: NSRect
+	superview: typing.Any
+	
+	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+		if class_version != 41:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		unknown_int = unarchiver.decode_value_of_type(b"i")
+		if unknown_int != 0:
+			raise ValueError(f"Unknown int field is not 0: {unknown_int}")
+		
+		(
+			subviews, obj2, obj3, obj4,
+			frame_x, frame_y, frame_width, frame_height,
+			bounds_x, bounds_y, bounds_width, bounds_height,
+		) = unarchiver.decode_values_of_types(
+			b"@", b"@", b"@", b"@",
+			b"f", b"f", b"f", b"f",
+			b"f", b"f", b"f", b"f",
+		)
+		
+		if subviews is None:
+			self.subviews = []
+		else:
+			if not isinstance(subviews, foundation.NSArray):
+				raise TypeError(f"Subviews must be a NSArray or nil, not {type(subviews)}")
+			self.subviews = subviews.elements
+		
+		if obj2 is not None:
+			raise ValueError("Unknown object 2 is not nil")
+		if obj3 is not None:
+			raise ValueError("Unknown object 3 is not nil")
+		if obj4 is not None:
+			raise ValueError("Unknown object 4 is not nil")
+		
+		self.frame = NSRect(NSPoint(frame_x, frame_y), NSSize(frame_width, frame_height))
+		self.bounds = NSRect(NSPoint(bounds_x, bounds_y), NSSize(bounds_width, bounds_height))
+		
+		superview = unarchiver.decode_value_of_type(b"@")
+		if superview is not None and not isinstance(superview, NSView):
+			raise TypeError(f"Superview must be a NSView or nil, not {type(superview)}")
+		self.superview = superview
+		
+		obj6 = unarchiver.decode_value_of_type(b"@")
+		if obj6 is not None:
+			raise ValueError("Unknown object 6 is not nil")
+		obj7 = unarchiver.decode_value_of_type(b"@")
+		if obj7 is not None:
+			raise ValueError("Unknown object 7 is not nil")
+		obj8 = unarchiver.decode_value_of_type(b"@")
+		if obj8 is not None:
+			raise ValueError("Unknown object 8 is not nil")
+	
+	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+		yield from super()._as_multiline_string_(state=state)
+		
+		if self.subviews:
+			yield f"\t{len(self.subviews)} {'subview' if len(self.subviews) == 1 else 'subviews'}:"
+			for subview in self.subviews:
+				for line in advanced_repr.as_multiline_string(subview, calling_self=self, state=state):
+					yield "\t\t" + line
+		
+		yield f"\tframe: {self.frame!r}"
+		yield f"\tbounds: {self.bounds!r}"
+		
+		if self.superview is None:
+			superview_desc = "None"
+		else:
+			superview_desc = f"<{_common.object_class_name(self.superview)}>"
+		yield f"\tsuperview: {superview_desc}"
