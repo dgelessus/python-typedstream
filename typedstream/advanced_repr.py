@@ -15,7 +15,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-import abc
 import types
 import typing
 
@@ -82,25 +81,90 @@ class RecursiveReprState(object):
 		return RecursiveReprState._Context(self, obj)
 
 
-class AsMultilineStringBase(abc.ABC):
+class AsMultilineStringBase(object):
 	"""Base class for classes that want to implement a custom multiline string representation,
 	for use by :func:`as_multiline_string`.
 	
 	This also provides an implementation of ``__str__`` based on :meth:`~AsMultilineStringBase._as_multiline_string_`.
 	"""
 	
-	@abc.abstractmethod
-	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
-		"""Convert ``self`` to a multiline string representation.
+	detect_backreferences: typing.ClassVar[bool] = True
+	
+	def _as_multiline_string_header_(self, *, state: RecursiveReprState) -> str:
+		"""Render the header part of this object's multiline string representation.
 		
-		This method should not be called directly -
-		use :func:`as_multiline_string` instead.
+		The header should be a compact single-line overview description of the object.
+		Usually it should indicate the object's type
+		and other relevant attributes that can be represented in a short form,
+		e. g. the length of a collection.
+		
+		If the body part is non-empty,
+		then the header automatically has a colon appended.
+		
+		Because the header is always fully rendered even for multiple references to the same object,
+		it shouldn't recursively render other complex objects,
+		especially ones that might have cyclic references back to this object.
 		
 		:param state: A state object used to track repeated or recursive calls for the same object.
 		:return: The string representation as an iterable of lines (line terminators not included).
 		"""
 		
 		raise NotImplementedError()
+	
+	def _as_multiline_string_body_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
+		"""Render the body part of this object's multiline string representation.
+		
+		The body is always rendered after the header,
+		so it shouldn't duplicate any information that is already part of the header.
+		
+		Each line in the body is automatically indented by one tab
+		so that the body appears visually nested under the header.
+		
+		:param state: A state object used to track repeated or recursive calls for the same object.
+		:return: The string representation as an iterable of lines (line terminators not included).
+		"""
+		
+		raise NotImplementedError()
+	
+	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
+		"""Convert ``self`` to a multiline string representation.
+		
+		This method should not be called directly -
+		use :func:`as_multiline_string` instead.
+		
+		The default implementation is based on :meth:`_as_multiline_string_header_` and :meth:`_as_multiline_string_body_`.
+		It first outputs the header on its own line,
+		then all of the body lines indented by one tab each.
+		If this object has already been rendered before
+		(due to multiple or circular references),
+		then the body lines are *not* rendered again
+		and only the header is output
+		(followed by a short explanation).
+		
+		If the default implementation of this method is overridden,
+		then :meth:`_as_multiline_string_header_` and :meth:`_as_multiline_string_body_` don't have to be implemented.
+		
+		:param state: A state object used to track repeated or recursive calls for the same object.
+		:return: The string representation as an iterable of lines (line terminators not included).
+		"""
+		
+		first = self._as_multiline_string_header_(state=state)
+		if id(self) in state.currently_rendering_ids:
+			yield first + " (circular reference)"
+		elif type(self).detect_backreferences and id(self) in state.already_rendered_ids:
+			yield first + " (backreference)"
+		else:
+			body_it = iter(self._as_multiline_string_body_(state=state))
+			# Silly hack: append the colon to the first line only if at least one more line comes after it.
+			try:
+				second = next(body_it)
+			except StopIteration:
+				yield first
+			else:
+				yield first + ":"
+				yield "\t" + second
+				for line in body_it:
+					yield "\t" + line
 	
 	def __str__(self) -> str:
 		return "\n".join(self._as_multiline_string_(state=RecursiveReprState(set(), [])))

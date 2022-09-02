@@ -98,6 +98,8 @@ class NSMutableString(NSString):
 
 @archiver.archived_class
 class NSValue(NSObject, advanced_repr.AsMultilineStringBase):
+	detect_backreferences = False
+	
 	type_encoding: bytes
 	value: typing.Any
 	
@@ -167,6 +169,8 @@ class NSMutableSet(NSSet):
 
 @archiver.archived_class
 class NSDictionary(NSObject, advanced_repr.AsMultilineStringBase):
+	detect_backreferences = False
+	
 	contents: "collections.OrderedDict[typing.Any, typing.Any]"
 	
 	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
@@ -182,21 +186,21 @@ class NSDictionary(NSObject, advanced_repr.AsMultilineStringBase):
 			value = unarchiver.decode_value_of_type(b"@")
 			self.contents[key] = value
 	
-	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
 		if not self.contents:
 			count_desc = "empty"
 		elif len(self.contents) == 1:
-			count_desc = "1 entry:"
+			count_desc = "1 entry"
 		else:
-			count_desc = f"{len(self.contents)} entries:"
+			count_desc = f"{len(self.contents)} entries"
 		
-		yield f"{type(self).__name__}, {count_desc}"
-		
+		return f"{type(self).__name__}, {count_desc}"
+	
+	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		for key, value in self.contents.items():
 			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self, state=state))
-			yield f"\t{key!r}: " + next(value_it, "")
-			for line in value_it:
-				yield "\t" + line
+			yield f"{key!r}: " + next(value_it, "")
+			yield from value_it
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}({self.contents!r})"

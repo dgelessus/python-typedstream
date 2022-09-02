@@ -355,9 +355,10 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 				for line in self._render_tree(child, children, seen):
 					yield "\t" + line
 	
-	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
-		yield f"{type(self).__name__}, target framework {self.target_framework!r}:"
-		
+	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
+		return f"{type(self).__name__}, target framework {self.target_framework!r}"
+	
+	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		children = collections.defaultdict(list)
 		for child, parent in self.object_parents.items():
 			children[parent].append(child)
@@ -367,35 +368,34 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		
 		seen_in_tree: typing.Set[typing.Any] = set()
 		tree_it = iter(self._render_tree(self.root, children, seen_in_tree))
-		yield f"\tobject tree: {next(tree_it)}"
-		for line in tree_it:
-			yield "\t" + line
+		yield f"object tree: {next(tree_it)}"
+		yield from tree_it
 		
 		missed_parents = set(children) - seen_in_tree
 		if missed_parents:
-			yield "\tWARNING: one or more parent objects not reachable from root:"
+			yield "WARNING: one or more parent objects not reachable from root:"
 			for obj in missed_parents:
-				yield f"\t\t{self._object_desc(obj)} has children:"
+				yield f"\t{self._object_desc(obj)} has children:"
 				for child in children[obj]:
-					yield f"\t\t\t{self._object_desc(child)}"
+					yield f"\t\t{self._object_desc(child)}"
 		
 		missed_names = set(self.object_names) - seen_in_tree
 		if missed_names:
-			yield "\tWARNING: one or more named objects not reachable from root:"
+			yield "WARNING: one or more named objects not reachable from root:"
 			for obj in missed_names:
-				yield f"\t\t{self._object_desc(obj)}"
+				yield f"\t{self._object_desc(obj)}"
 		
-		yield f"\t{len(self.connections)} connections:"
+		yield f"{len(self.connections)} connections:"
 		for connection in self.connections:
-			yield f"\t\t{self._object_desc(connection)}"
+			yield f"\t{self._object_desc(connection)}"
 		
 		missed_objects = set(self.object_ids) - seen_in_tree - set(self.connections)
 		if missed_objects:
-			yield "\tWARNING: one or more objects not reachable from root or connections:"
+			yield "WARNING: one or more objects not reachable from root or connections:"
 			for obj in missed_objects:
-				yield f"\t\t{self._object_desc(obj)}"
+				yield f"\t{self._object_desc(obj)}"
 		
-		yield f"\t{len(self.object_ids)} objects:"
+		yield f"{len(self.object_ids)} objects:"
 		for obj, oid in self.object_ids.items():
 			oid_desc = f"#{oid}"
 			try:
@@ -406,21 +406,19 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 				oid_desc += f" {name!r}"
 			
 			obj_it = iter(advanced_repr.as_multiline_string(obj, calling_self=self, state=state))
-			yield f"\t\t{oid_desc}: {next(obj_it)}"
+			yield f"\t{oid_desc}: {next(obj_it)}"
 			for line in obj_it:
-				yield "\t\t" + line
+				yield "\t" + line
 		
-		yield f"\tnext object ID: #{self.next_object_id}"
+		yield f"next object ID: #{self.next_object_id}"
 		
 		unknown_set_it = iter(advanced_repr.as_multiline_string(self.unknown_set, calling_self=self, state=state))
-		yield f"\tunknown set: {next(unknown_set_it)}"
-		for line in unknown_set_it:
-			yield "\t" + line
+		yield f"unknown set: {next(unknown_set_it)}"
+		yield from unknown_set_it
 		
 		unknown_object_it = iter(advanced_repr.as_multiline_string(self.unknown_object, calling_self=self, state=state))
-		yield f"\tunknown object: {next(unknown_object_it)}"
-		for line in unknown_object_it:
-			yield "\t" + line
+		yield f"unknown object: {next(unknown_object_it)}"
+		yield from unknown_object_it
 	
 	def __repr__(self) -> str:
 		object_parents_repr = "{" + ", ".join(f"{self._oid_repr(child)}: {self._oid_repr(parent)}" for child, parent in self.object_parents.items()) + "}"
@@ -444,13 +442,15 @@ class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			raise TypeError(f"Next responder must be a NSResponder or nil, not {type(next_responder)}")
 		self.next_responder = next_responder
 	
-	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
-		yield f"{type(self).__name__}:"
+	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
+		return type(self).__name__
+	
+	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		if self.next_responder is None:
 			next_responder_desc = "None"
 		else:
 			next_responder_desc = f"<{_common.object_class_name(self.next_responder)}>"
-		yield f"\tnext responder: {next_responder_desc}"
+		yield f"next responder: {next_responder_desc}"
 	
 	def __repr__(self) -> str:
 		if self.next_responder is None:
@@ -517,20 +517,20 @@ class NSView(NSResponder):
 		if obj8 is not None:
 			raise ValueError("Unknown object 8 is not nil")
 	
-	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
-		yield from super()._as_multiline_string_(state=state)
+	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+		yield from super()._as_multiline_string_body_(state=state)
 		
 		if self.subviews:
-			yield f"\t{len(self.subviews)} {'subview' if len(self.subviews) == 1 else 'subviews'}:"
+			yield f"{len(self.subviews)} {'subview' if len(self.subviews) == 1 else 'subviews'}:"
 			for subview in self.subviews:
 				for line in advanced_repr.as_multiline_string(subview, calling_self=self, state=state):
-					yield "\t\t" + line
+					yield "\t" + line
 		
-		yield f"\tframe: {self.frame!r}"
-		yield f"\tbounds: {self.bounds!r}"
+		yield f"frame: {self.frame!r}"
+		yield f"bounds: {self.bounds!r}"
 		
 		if self.superview is None:
 			superview_desc = "None"
 		else:
 			superview_desc = f"<{_common.object_class_name(self.superview)}>"
-		yield f"\tsuperview: {superview_desc}"
+		yield f"superview: {superview_desc}"

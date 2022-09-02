@@ -55,6 +55,8 @@ class List(Object, _common.ArraySetBase):
 
 @archiver.archived_class
 class HashTable(Object, advanced_repr.AsMultilineStringBase):
+	detect_backreferences = False
+	
 	contents: "collections.OrderedDict[typing.Any, typing.Any]"
 	key_type_encoding: bytes
 	value_type_encoding: bytes
@@ -77,21 +79,21 @@ class HashTable(Object, advanced_repr.AsMultilineStringBase):
 			value = unarchiver.decode_value_of_type(self.value_type_encoding)
 			self.contents[key] = value
 	
-	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
 		if not self.contents:
 			count_desc = "empty"
 		elif len(self.contents) == 1:
-			count_desc = "1 entry:"
+			count_desc = "1 entry"
 		else:
-			count_desc = f"{len(self.contents)} entries:"
+			count_desc = f"{len(self.contents)} entries"
 		
-		yield f"{type(self).__name__}, key/value types {self.key_type_encoding!r}/{self.value_type_encoding!r}, {count_desc}"
-		
+		return f"{type(self).__name__}, key/value types {self.key_type_encoding!r}/{self.value_type_encoding!r}, {count_desc}"
+	
+	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		for key, value in self.contents.items():
 			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self, state=state))
-			yield f"\t{key!r}: " + next(value_it, "")
-			for line in value_it:
-				yield "\t" + line
+			yield f"{key!r}: " + next(value_it, "")
+			yield from value_it
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}(key_type_encoding={self.key_type_encoding!r}, value_type_encoding={self.value_type_encoding!r}, contents={self.contents!r})"
@@ -99,6 +101,8 @@ class HashTable(Object, advanced_repr.AsMultilineStringBase):
 
 @archiver.archived_class
 class StreamTable(HashTable):
+	detect_backreferences = False
+	
 	class _UnarchivedContents(typing.Mapping[typing.Any, typing.Any]):
 		archived_contents: typing.Mapping[typing.Any, bytes]
 		
@@ -137,25 +141,27 @@ class StreamTable(HashTable):
 		
 		self.unarchived_contents = StreamTable._UnarchivedContents(self.contents)
 	
-	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
 		if not self.unarchived_contents:
 			count_desc = "empty"
 		elif len(self.unarchived_contents) == 1:
-			count_desc = "1 entry:"
+			count_desc = "1 entry"
 		else:
-			count_desc = f"{len(self.unarchived_contents)} entries:"
+			count_desc = f"{len(self.unarchived_contents)} entries"
 		
-		yield f"{type(self).__name__}, {count_desc}"
-		
+		return f"{type(self).__name__}, {count_desc}"
+	
+	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		for key, value in self.unarchived_contents.items():
 			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self, state=state))
-			yield f"\t{key!r}: " + next(value_it, "")
-			for line in value_it:
-				yield "\t" + line
+			yield f"{key!r}: " + next(value_it, "")
+			yield from value_it
 
 
 @archiver.archived_class
 class Storage(Object, advanced_repr.AsMultilineStringBase):
+	detect_backreferences = False
+	
 	element_type_encoding: bytes
 	element_size: int
 	elements: typing.List[typing.Any]
@@ -180,19 +186,19 @@ class Storage(Object, advanced_repr.AsMultilineStringBase):
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")
 	
-	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
 		if not self.elements:
 			count_desc = "empty"
 		elif len(self.elements) == 1:
-			count_desc = "1 element:"
+			count_desc = "1 element"
 		else:
-			count_desc = f"{len(self.elements)} elements:"
+			count_desc = f"{len(self.elements)} elements"
 		
-		yield f"{type(self).__name__}, element type {self.element_type_encoding!r} ({self.element_size!r} bytes each), {count_desc}"
-		
+		return f"{type(self).__name__}, element type {self.element_type_encoding!r} ({self.element_size!r} bytes each), {count_desc}"
+	
+	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
 		for element in self.elements:
-			for line in advanced_repr.as_multiline_string(element, calling_self=self, state=state):
-				yield "\t" + line
+			yield from advanced_repr.as_multiline_string(element, calling_self=self, state=state)
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}(element_type_encoding={self.element_type_encoding!r}, element_size={self.element_size!r}, elements={self.elements!r})"
