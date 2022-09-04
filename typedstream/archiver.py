@@ -586,6 +586,7 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 			self.shared_object_table[placeholder_index] = (stream.ObjectReference.Type.OBJECT, obj)
 			
 			if known_obj is not None:
+				assert superclass is not None
 				known_obj.init_from_unarchiver(self, superclass)
 			
 			next_event = next(self.reader)
