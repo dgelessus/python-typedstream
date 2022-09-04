@@ -3,23 +3,23 @@
 A pure Python, cross-platform library/tool for reading Mac OS X and NeXTSTEP typedstream files.
 
 The typedstream format is a serialization format for C and Objective-C data structures.
-It is used by Apple's implementation of the Foundation classes [NSArchiver](https://developer.apple.com/documentation/foundation/nsarchiver?language=objc) and [NSUnarchiver](https://developer.apple.com/documentation/foundation/nsunarchiver?language=objc),
+It is used by Apple's implementation of the Foundation classes [`NSArchiver`](https://developer.apple.com/documentation/foundation/nsarchiver?language=objc) and [`NSUnarchiver`](https://developer.apple.com/documentation/foundation/nsunarchiver?language=objc),
 and is based on the data format originally used by NeXTSTEP's `NXTypedStream` APIs.
 
-The NSArchiver and NSUnarchiver classes and the typedstream format are superseded by [NSKeyedArchiver](https://developer.apple.com/documentation/foundation/nskeyedarchiver?language=objc) and [NSKeyedUnarchiver](https://developer.apple.com/documentation/foundation/nskeyedunarchiver?language=objc),
+The `NSArchiver` and `NSUnarchiver` classes and the typedstream format are superseded by [`NSKeyedArchiver`](https://developer.apple.com/documentation/foundation/nskeyedarchiver?language=objc) and [`NSKeyedUnarchiver`](https://developer.apple.com/documentation/foundation/nskeyedunarchiver?language=objc),
 which use binary property lists for serialization.
-NSArchiver and NSUnarchiver are deprecated since macOS 10.13 (but still available as of macOS 10.15)
+`NSArchiver` and `NSUnarchiver` are deprecated since macOS 10.13 (but still available as of macOS 10.15)
 and have never been available for application developers on other Apple platforms (iOS, watchOS, tvOS).
 Despite this,
 the typedstream data format is still used by some macOS components and applications,
 such as the Stickies and Grapher applications.
 
 **Note:**
-The typedstream data format is undocumented and specific to the Mac OS X implementation of NSArchiver/NSUnarchiver.
-Other Objective-C/Foundation implementations may also provide NSArchiver/NSUnarchiver,
+The typedstream data format is undocumented and specific to the Mac OS X implementation of `NSArchiver`/`NSUnarchiver`.
+Other Objective-C/Foundation implementations may also provide `NSArchiver`/`NSUnarchiver`,
 but might not use the same data format.
 For example,
-GNUstep's NSArchiver/NSUnarchiver implementations use a completely different format,
+GNUstep's `NSArchiver`/`NSUnarchiver` implementations use a completely different format,
 with a `GNUstep archive` signature string.
 
 ## Features
@@ -36,7 +36,7 @@ with a `GNUstep archive` signature string.
     but are represented as generic objects whose contents can only be accessed by index
     (because typedstream data doesn't include field names).
 
-* Unlike with the Objective-C [NSCoder](https://developer.apple.com/documentation/foundation/nscoder?language=objc) API,
+* Unlike with the Objective-C [`NSCoder`](https://developer.apple.com/documentation/foundation/nscoder?language=objc) API,
   values can be read without knowing their exact type beforehand.
   However, when the expected types in a certain context are known,
   the types in the typedstream are checked to make sure that they match.
