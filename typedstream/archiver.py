@@ -209,7 +209,9 @@ class GenericArchivedObject(advanced_repr.AsMultilineStringBase):
 			yield from advanced_repr.as_multiline_string(value, calling_self=self, state=state)
 
 
-class _KnownArchivedClass(abc.ABCMeta):
+# False positive from flake8-bugbear, see:
+# https://github.com/PyCQA/flake8-bugbear/issues/280
+class _KnownArchivedClass(abc.ABCMeta): # noqa: B024
 	"""Metaclass for :class:`KnownArchivedObject`."""
 	
 	def __instancecheck__(self, instance: typing.Any) -> bool:
