@@ -16,7 +16,6 @@
 
 
 import contextvars
-import types
 import typing
 
 
@@ -35,32 +34,6 @@ class RecursiveReprState(object):
 	and to avoid rendering large data structures more than once.
 	"""
 	
-	class _Context(typing.ContextManager[None]):
-		state: "RecursiveReprState"
-		obj: object
-		
-		def __init__(self, state: "RecursiveReprState", obj: object) -> None:
-			super().__init__()
-			
-			self.state = state
-			self.obj = obj
-		
-		def __enter__(self) -> None:
-			if self.obj is not None:
-				self.state.already_rendered_ids.add(id(self.obj))
-				self.state.currently_rendering_ids.append(id(self.obj))
-		
-		def __exit__(
-			self,
-			exc_type: typing.Optional[typing.Type[BaseException]],
-			exc_val: typing.Optional[BaseException],
-			exc_tb: typing.Optional[types.TracebackType],
-		) -> typing.Optional[bool]:
-			if self.obj is not None:
-				popped = self.state.currently_rendering_ids.pop()
-				assert popped == id(self.obj)
-			return None
-	
 	already_rendered_ids: typing.Set[int]
 	currently_rendering_ids: typing.List[int]
 	
@@ -69,17 +42,6 @@ class RecursiveReprState(object):
 		
 		self.already_rendered_ids = already_seen_ids
 		self.currently_rendering_ids = ids_stack
-	
-	def _representing(self, obj: object) -> typing.ContextManager[None]:
-		"""Create a context manager to indicate when the given object is being processed.
-		
-		When the context manager is entered,
-		``id(obj)`` is added to :attr:`already_rendered_ids` and :attr:`currently_rendering_ids`.
-		When it is exited,
-		``id(obj)`` is removed again from :attr:`currently_rendering_ids` (but not from :attr:`already_rendered_ids`).
-		"""
-		
-		return RecursiveReprState._Context(self, obj)
 
 
 _state: "contextvars.ContextVar[RecursiveReprState]" = contextvars.ContextVar("_state")
@@ -196,13 +158,22 @@ def as_multiline_string(
 	
 	try:
 		try:
-			_state.get()
+			state = _state.get()
 		except LookupError:
-			token = _state.set(RecursiveReprState(set(), []))
+			state = RecursiveReprState(set(), [])
+			token = _state.set(state)
 		
 		if isinstance(obj, AsMultilineStringBase):
-			with _state.get()._representing(calling_self):
+			if calling_self is not None:
+				state.already_rendered_ids.add(id(calling_self))
+				state.currently_rendering_ids.append(id(calling_self))
+			
+			try:
 				yield from obj._as_multiline_string_()
+			finally:
+				if calling_self is not None:
+					popped = state.currently_rendering_ids.pop()
+					assert popped == id(calling_self)
 		else:
 			yield from str(obj).splitlines()
 	finally:
