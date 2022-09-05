@@ -20,31 +20,13 @@ import typing
 
 
 __all__ = [
-	"RecursiveReprState",
 	"AsMultilineStringBase",
 	"as_multiline_string",
 ]
 
 
-class RecursiveReprState(object):
-	"""Holds state during recursive calls to :func:`repr`/``__repr__``-like functions,
-	to track which objects have already been rendered before or are currently still being rendered.
-	
-	This state is used to avoid infinite recursion in case of circular references,
-	and to avoid rendering large data structures more than once.
-	"""
-	
-	already_rendered_ids: typing.Set[int]
-	currently_rendering_ids: typing.List[int]
-	
-	def __init__(self, already_seen_ids: typing.Set[int], ids_stack: typing.List[int]) -> None:
-		super().__init__()
-		
-		self.already_rendered_ids = already_seen_ids
-		self.currently_rendering_ids = ids_stack
-
-
-_state: "contextvars.ContextVar[RecursiveReprState]" = contextvars.ContextVar("_state")
+_already_rendered_ids: "contextvars.ContextVar[typing.Set[int]]" = contextvars.ContextVar("_already_rendered_ids")
+_currently_rendering_ids: "contextvars.ContextVar[typing.List[int]]" = contextvars.ContextVar("_currently_rendering_ids")
 
 
 class AsMultilineStringBase(object):
@@ -112,10 +94,9 @@ class AsMultilineStringBase(object):
 		"""
 		
 		first = self._as_multiline_string_header_()
-		state = _state.get()
-		if id(self) in state.currently_rendering_ids:
+		if id(self) in _currently_rendering_ids.get():
 			yield first + " (circular reference)"
-		elif type(self).detect_backreferences and id(self) in state.already_rendered_ids:
+		elif type(self).detect_backreferences and id(self) in _already_rendered_ids.get():
 			yield first + " (backreference)"
 		else:
 			body_it = iter(self._as_multiline_string_body_())
@@ -155,27 +136,37 @@ def as_multiline_string(
 	"""
 	
 	token: typing.Optional[contextvars.Token] = None
+	token2: typing.Optional[contextvars.Token] = None
 	
 	try:
 		try:
-			state = _state.get()
+			already_rendered_ids = _already_rendered_ids.get()
 		except LookupError:
-			state = RecursiveReprState(set(), [])
-			token = _state.set(state)
+			already_rendered_ids = set()
+			token = _already_rendered_ids.set(already_rendered_ids)
+		
+		try:
+			currently_rendering_ids = _currently_rendering_ids.get()
+		except LookupError:
+			currently_rendering_ids = []
+			token2 = _currently_rendering_ids.set(currently_rendering_ids)
 		
 		if isinstance(obj, AsMultilineStringBase):
 			if calling_self is not None:
-				state.already_rendered_ids.add(id(calling_self))
-				state.currently_rendering_ids.append(id(calling_self))
+				already_rendered_ids.add(id(calling_self))
+				currently_rendering_ids.append(id(calling_self))
 			
 			try:
 				yield from obj._as_multiline_string_()
 			finally:
 				if calling_self is not None:
-					popped = state.currently_rendering_ids.pop()
+					popped = currently_rendering_ids.pop()
 					assert popped == id(calling_self)
 		else:
 			yield from str(obj).splitlines()
 	finally:
+		if token2 is not None:
+			_currently_rendering_ids.reset(token2)
+		
 		if token is not None:
-			_state.reset(token)
+			_already_rendered_ids.reset(token)
