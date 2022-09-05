@@ -77,12 +77,12 @@ class TypedGroup(advanced_repr.AsMultilineStringBase):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(encodings={self.encodings!r}, values={self.values!r})"
 	
-	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
+	def _as_multiline_string_header_(self) -> str:
 		return "group"
 	
-	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for encoding, value in zip(self.encodings, self.values):
-			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self, state=state))
+			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self))
 			yield f"type {encoding!r}: {next(value_it)}"
 			yield from value_it
 
@@ -110,8 +110,8 @@ class TypedValue(TypedGroup):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(encoding={self.encoding!r}, value={self.value!r})"
 	
-	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
-		value_it = iter(advanced_repr.as_multiline_string(self.value, calling_self=self, state=state))
+	def _as_multiline_string_(self) -> typing.Iterable[str]:
+		value_it = iter(advanced_repr.as_multiline_string(self.value, calling_self=self))
 		yield f"type {self.encoding!r}: {next(value_it)}"
 		yield from value_it
 
@@ -131,16 +131,16 @@ class Array(advanced_repr.AsMultilineStringBase):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}({self.elements!r})"
 	
-	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
+	def _as_multiline_string_header_(self) -> str:
 		if isinstance(self.elements, bytes):
 			return f"array, {len(self.elements)} bytes: {self.elements!r}"
 		else:
 			return f"array, {len(self.elements)} elements"
 	
-	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		if not isinstance(self.elements, bytes): # Byte arrays are displayed entirely in the header
 			for element in self.elements:
-				yield from advanced_repr.as_multiline_string(element, calling_self=self, state=state)
+				yield from advanced_repr.as_multiline_string(element, calling_self=self)
 
 
 class Class(object):
@@ -194,19 +194,19 @@ class GenericArchivedObject(advanced_repr.AsMultilineStringBase):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(clazz={self.clazz!r}, super_object={self.super_object!r}, contents={self.contents!r})"
 	
-	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
+	def _as_multiline_string_header_(self) -> str:
 		header = f"object of class {self.clazz}"
 		if self.super_object is None and not self.contents:
 			header += ", no contents"
 		return header
 	
-	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		if self.super_object is not None:
-			super_object_it = iter(advanced_repr.as_multiline_string(self.super_object, calling_self=self, state=state))
+			super_object_it = iter(advanced_repr.as_multiline_string(self.super_object, calling_self=self))
 			yield f"super object: {next(super_object_it)}"
 			yield from super_object_it
 		for value in self.contents:
-			yield from advanced_repr.as_multiline_string(value, calling_self=self, state=state)
+			yield from advanced_repr.as_multiline_string(value, calling_self=self)
 
 
 # False positive from flake8-bugbear, see:
@@ -364,16 +364,16 @@ class GenericStruct(advanced_repr.AsMultilineStringBase):
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(name={self.name!r}, fields={self.fields!r})"
 	
-	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
+	def _as_multiline_string_header_(self) -> str:
 		if self.name is None:
 			decoded_name = "(no name)"
 		else:
 			decoded_name = self.name.decode("ascii", errors="backslashreplace")
 		return f"struct {decoded_name}"
 	
-	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for field_value in self.fields:
-			yield from advanced_repr.as_multiline_string(field_value, calling_self=self, state=state)
+			yield from advanced_repr.as_multiline_string(field_value, calling_self=self)
 
 
 _KS = typing.TypeVar("_KS", bound="KnownStruct")

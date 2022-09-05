@@ -49,8 +49,13 @@ with a `GNUstep archive` signature string.
 
 Python 3.6 or later.
 No other libraries are required,
-except that before Python 3.8,
-the `typing_extensions` library is needed.
+except on older Python versions:
+
+* [`contextvars`](https://pypi.org/project/contextvars/) is needed before Python 3.7
+* [`typing_extensions`](https://pypi.org/project/typing-extensions/) is needed before Python 3.8
+
+These libraries are declared as [platform-specific dependencies](https://setuptools.pypa.io/en/latest/userguide/dependency_management.html#platform-specific-dependencies)
+and will be installed automatically as needed.
 
 ## Installation
 

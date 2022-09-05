@@ -110,8 +110,8 @@ class NSValue(NSObject, advanced_repr.AsMultilineStringBase):
 		self.type_encoding = unarchiver.decode_value_of_type(b"*")
 		self.value = unarchiver.decode_value_of_type(self.type_encoding)
 	
-	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
-		value_it = iter(advanced_repr.as_multiline_string(self.value, calling_self=self, state=state))
+	def _as_multiline_string_(self) -> typing.Iterable[str]:
+		value_it = iter(advanced_repr.as_multiline_string(self.value, calling_self=self))
 		yield f"{type(self).__name__}, type {self.type_encoding!r}: " + next(value_it, "")
 		for line in value_it:
 			yield "\t" + line
@@ -186,7 +186,7 @@ class NSDictionary(NSObject, advanced_repr.AsMultilineStringBase):
 			value = unarchiver.decode_value_of_type(b"@")
 			self.contents[key] = value
 	
-	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
+	def _as_multiline_string_header_(self) -> str:
 		if not self.contents:
 			count_desc = "empty"
 		elif len(self.contents) == 1:
@@ -196,9 +196,9 @@ class NSDictionary(NSObject, advanced_repr.AsMultilineStringBase):
 		
 		return f"{type(self).__name__}, {count_desc}"
 	
-	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for key, value in self.contents.items():
-			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self, state=state))
+			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self))
 			yield f"{key!r}: " + next(value_it, "")
 			yield from value_it
 	

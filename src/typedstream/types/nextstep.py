@@ -79,7 +79,7 @@ class HashTable(Object, advanced_repr.AsMultilineStringBase):
 			value = unarchiver.decode_value_of_type(self.value_type_encoding)
 			self.contents[key] = value
 	
-	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
+	def _as_multiline_string_header_(self) -> str:
 		if not self.contents:
 			count_desc = "empty"
 		elif len(self.contents) == 1:
@@ -89,9 +89,9 @@ class HashTable(Object, advanced_repr.AsMultilineStringBase):
 		
 		return f"{type(self).__name__}, key/value types {self.key_type_encoding!r}/{self.value_type_encoding!r}, {count_desc}"
 	
-	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for key, value in self.contents.items():
-			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self, state=state))
+			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self))
 			yield f"{key!r}: " + next(value_it, "")
 			yield from value_it
 	
@@ -141,7 +141,7 @@ class StreamTable(HashTable):
 		
 		self.unarchived_contents = StreamTable._UnarchivedContents(self.contents)
 	
-	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
+	def _as_multiline_string_header_(self) -> str:
 		if not self.unarchived_contents:
 			count_desc = "empty"
 		elif len(self.unarchived_contents) == 1:
@@ -151,9 +151,9 @@ class StreamTable(HashTable):
 		
 		return f"{type(self).__name__}, {count_desc}"
 	
-	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for key, value in self.unarchived_contents.items():
-			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self, state=state))
+			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self))
 			yield f"{key!r}: " + next(value_it, "")
 			yield from value_it
 
@@ -186,7 +186,7 @@ class Storage(Object, advanced_repr.AsMultilineStringBase):
 		else:
 			raise ValueError(f"Unsupported version: {class_version}")
 	
-	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
+	def _as_multiline_string_header_(self) -> str:
 		if not self.elements:
 			count_desc = "empty"
 		elif len(self.elements) == 1:
@@ -196,9 +196,9 @@ class Storage(Object, advanced_repr.AsMultilineStringBase):
 		
 		return f"{type(self).__name__}, element type {self.element_type_encoding!r} ({self.element_size!r} bytes each), {count_desc}"
 	
-	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for element in self.elements:
-			yield from advanced_repr.as_multiline_string(element, calling_self=self, state=state)
+			yield from advanced_repr.as_multiline_string(element, calling_self=self)
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}(element_type_encoding={self.element_type_encoding!r}, element_size={self.element_size!r}, elements={self.elements!r})"

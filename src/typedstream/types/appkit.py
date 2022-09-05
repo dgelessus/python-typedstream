@@ -218,8 +218,8 @@ class NSCustomObject(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		self.class_name = class_name.value
 		self.object = obj
 	
-	def _as_multiline_string_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
-		it = iter(advanced_repr.as_multiline_string(self.object, calling_self=self, state=state))
+	def _as_multiline_string_(self) -> typing.Iterable[str]:
+		it = iter(advanced_repr.as_multiline_string(self.object, calling_self=self))
 		yield f"{type(self).__name__}, class {self.class_name}, object: " + next(it, "")
 		for line in it:
 			yield "\t" + line
@@ -355,10 +355,10 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 				for line in self._render_tree(child, children, seen):
 					yield "\t" + line
 	
-	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
+	def _as_multiline_string_header_(self) -> str:
 		return f"{type(self).__name__}, target framework {self.target_framework!r}"
 	
-	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		children = collections.defaultdict(list)
 		for child, parent in self.object_parents.items():
 			children[parent].append(child)
@@ -405,18 +405,18 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			else:
 				oid_desc += f" {name!r}"
 			
-			obj_it = iter(advanced_repr.as_multiline_string(obj, calling_self=self, state=state))
+			obj_it = iter(advanced_repr.as_multiline_string(obj, calling_self=self))
 			yield f"\t{oid_desc}: {next(obj_it)}"
 			for line in obj_it:
 				yield "\t" + line
 		
 		yield f"next object ID: #{self.next_object_id}"
 		
-		unknown_set_it = iter(advanced_repr.as_multiline_string(self.unknown_set, calling_self=self, state=state))
+		unknown_set_it = iter(advanced_repr.as_multiline_string(self.unknown_set, calling_self=self))
 		yield f"unknown set: {next(unknown_set_it)}"
 		yield from unknown_set_it
 		
-		unknown_object_it = iter(advanced_repr.as_multiline_string(self.unknown_object, calling_self=self, state=state))
+		unknown_object_it = iter(advanced_repr.as_multiline_string(self.unknown_object, calling_self=self))
 		yield f"unknown object: {next(unknown_object_it)}"
 		yield from unknown_object_it
 	
@@ -442,10 +442,10 @@ class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			raise TypeError(f"Next responder must be a NSResponder or nil, not {type(next_responder)}")
 		self.next_responder = next_responder
 	
-	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
+	def _as_multiline_string_header_(self) -> str:
 		return type(self).__name__
 	
-	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		if self.next_responder is None:
 			next_responder_desc = "None"
 		else:
@@ -517,13 +517,13 @@ class NSView(NSResponder):
 		if obj8 is not None:
 			raise ValueError("Unknown object 8 is not nil")
 	
-	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
-		yield from super()._as_multiline_string_body_(state=state)
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
+		yield from super()._as_multiline_string_body_()
 		
 		if self.subviews:
 			yield f"{len(self.subviews)} {'subview' if len(self.subviews) == 1 else 'subviews'}:"
 			for subview in self.subviews:
-				for line in advanced_repr.as_multiline_string(subview, calling_self=self, state=state):
+				for line in advanced_repr.as_multiline_string(subview, calling_self=self):
 					yield "\t" + line
 		
 		yield f"frame: {self.frame!r}"

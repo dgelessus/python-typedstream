@@ -35,7 +35,7 @@ class ArraySetBase(advanced_repr.AsMultilineStringBase):
 	
 	elements: typing.List[typing.Any]
 	
-	def _as_multiline_string_header_(self, *, state: advanced_repr.RecursiveReprState) -> str:
+	def _as_multiline_string_header_(self) -> str:
 		if not self.elements:
 			count_desc = "empty"
 		elif len(self.elements) == 1:
@@ -45,9 +45,9 @@ class ArraySetBase(advanced_repr.AsMultilineStringBase):
 		
 		return f"{type(self).__name__}, {count_desc}"
 	
-	def _as_multiline_string_body_(self, *, state: advanced_repr.RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for element in self.elements:
-			yield from advanced_repr.as_multiline_string(element, calling_self=self, state=state)
+			yield from advanced_repr.as_multiline_string(element, calling_self=self)
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}({self.elements!r})"

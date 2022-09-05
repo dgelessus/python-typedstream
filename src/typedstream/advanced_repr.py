@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
+import contextvars
 import types
 import typing
 
@@ -81,6 +82,9 @@ class RecursiveReprState(object):
 		return RecursiveReprState._Context(self, obj)
 
 
+_state: "contextvars.ContextVar[RecursiveReprState]" = contextvars.ContextVar("_state")
+
+
 class AsMultilineStringBase(object):
 	"""Base class for classes that want to implement a custom multiline string representation,
 	for use by :func:`as_multiline_string`.
@@ -90,7 +94,7 @@ class AsMultilineStringBase(object):
 	
 	detect_backreferences: typing.ClassVar[bool] = True
 	
-	def _as_multiline_string_header_(self, *, state: RecursiveReprState) -> str:
+	def _as_multiline_string_header_(self) -> str:
 		"""Render the header part of this object's multiline string representation.
 		
 		The header should be a compact single-line overview description of the object.
@@ -105,13 +109,12 @@ class AsMultilineStringBase(object):
 		it shouldn't recursively render other complex objects,
 		especially ones that might have cyclic references back to this object.
 		
-		:param state: A state object used to track repeated or recursive calls for the same object.
 		:return: The string representation as an iterable of lines (line terminators not included).
 		"""
 		
 		raise NotImplementedError()
 	
-	def _as_multiline_string_body_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		"""Render the body part of this object's multiline string representation.
 		
 		The body is always rendered after the header,
@@ -120,13 +123,12 @@ class AsMultilineStringBase(object):
 		Each line in the body is automatically indented by one tab
 		so that the body appears visually nested under the header.
 		
-		:param state: A state object used to track repeated or recursive calls for the same object.
 		:return: The string representation as an iterable of lines (line terminators not included).
 		"""
 		
 		raise NotImplementedError()
 	
-	def _as_multiline_string_(self, *, state: RecursiveReprState) -> typing.Iterable[str]:
+	def _as_multiline_string_(self) -> typing.Iterable[str]:
 		"""Convert ``self`` to a multiline string representation.
 		
 		This method should not be called directly -
@@ -144,17 +146,17 @@ class AsMultilineStringBase(object):
 		If the default implementation of this method is overridden,
 		then :meth:`_as_multiline_string_header_` and :meth:`_as_multiline_string_body_` don't have to be implemented.
 		
-		:param state: A state object used to track repeated or recursive calls for the same object.
 		:return: The string representation as an iterable of lines (line terminators not included).
 		"""
 		
-		first = self._as_multiline_string_header_(state=state)
+		first = self._as_multiline_string_header_()
+		state = _state.get()
 		if id(self) in state.currently_rendering_ids:
 			yield first + " (circular reference)"
 		elif type(self).detect_backreferences and id(self) in state.already_rendered_ids:
 			yield first + " (backreference)"
 		else:
-			body_it = iter(self._as_multiline_string_body_(state=state))
+			body_it = iter(self._as_multiline_string_body_())
 			# Silly hack: append the colon to the first line only if at least one more line comes after it.
 			try:
 				second = next(body_it)
@@ -167,14 +169,13 @@ class AsMultilineStringBase(object):
 					yield "\t" + line
 	
 	def __str__(self) -> str:
-		return "\n".join(self._as_multiline_string_(state=RecursiveReprState(set(), [])))
+		return "\n".join(self._as_multiline_string_())
 
 
 def as_multiline_string(
 	obj: object,
 	*,
 	calling_self: typing.Optional[object] = None,
-	state: typing.Optional[RecursiveReprState] = None,
 ) -> typing.Iterable[str]:
 	"""Convert an object to a multiline string representation.
 	
@@ -188,17 +189,22 @@ def as_multiline_string(
 	:param calling_self: The object that is asking for the representation.
 		This must be set when calling from an :meth:`~AsMultilineStringBase._as_multiline_string_` implementation,
 		so that repeated and recursive calls are tracked properly.
-	:param state: A state object from an outer :func:`as_multiline_string` call.
-		This must be set when calling from an :meth:`~AsMultilineStringBase._as_multiline_string_` implementation,
-		so that repeated and recursive calls are tracked properly.
 	:return: The string representation as an iterable of lines (line terminators not included).
 	"""
 	
-	if isinstance(obj, AsMultilineStringBase):
-		if state is None:
-			state = RecursiveReprState(set(), [])
+	token: typing.Optional[contextvars.Token] = None
+	
+	try:
+		try:
+			_state.get()
+		except LookupError:
+			token = _state.set(RecursiveReprState(set(), []))
 		
-		with state._representing(calling_self):
-			yield from obj._as_multiline_string_(state=state)
-	else:
-		yield from str(obj).splitlines()
+		if isinstance(obj, AsMultilineStringBase):
+			with _state.get()._representing(calling_self):
+				yield from obj._as_multiline_string_()
+		else:
+			yield from str(obj).splitlines()
+	finally:
+		if token is not None:
+			_state.reset(token)
