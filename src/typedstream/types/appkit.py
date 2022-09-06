@@ -221,6 +221,23 @@ class NSCustomObject(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 
 
 @archiving.archived_class
+class NSCustomResource(foundation.NSObject):
+	class_name: str
+	resource_name: str
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 41:
+			raise ValueError(f"Unsuppored version: {class_version}")
+		
+		class_name, resource_name = unarchiver.decode_values_of_types(foundation.NSString, foundation.NSString)
+		self.class_name = class_name.value
+		self.resource_name = resource_name.value
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__name__}(class_name={self.class_name!r}, resource_name={self.resource_name!r})"
+
+
+@archiving.archived_class
 class NSFont(foundation.NSObject):
 	name: str
 	size: float
