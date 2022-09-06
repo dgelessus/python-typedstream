@@ -26,7 +26,7 @@ __all__ = [
 
 
 _already_rendered_ids: "contextvars.ContextVar[typing.Set[int]]" = contextvars.ContextVar("_already_rendered_ids")
-_currently_rendering_ids: "contextvars.ContextVar[typing.List[int]]" = contextvars.ContextVar("_currently_rendering_ids")
+_currently_rendering_ids: "contextvars.ContextVar[typing.Tuple[int, ...]]" = contextvars.ContextVar("_currently_rendering_ids")
 
 
 class AsMultilineStringBase(object):
@@ -141,22 +141,16 @@ def as_multiline_string(obj: object) -> typing.Iterable[str]:
 		try:
 			currently_rendering_ids = _currently_rendering_ids.get()
 		except LookupError:
-			currently_rendering_ids = []
-			token2 = _currently_rendering_ids.set(currently_rendering_ids)
-		
-		if currently_rendering_ids:
+			currently_rendering_ids = ()
+		else:
 			already_rendered_ids.add(currently_rendering_ids[-1])
 		
-		currently_rendering_ids.append(id(obj))
+		token2 = _currently_rendering_ids.set(currently_rendering_ids + (id(obj),))
 		
-		try:
-			if isinstance(obj, AsMultilineStringBase):
-				yield from obj._as_multiline_string_()
-			else:
-				yield from str(obj).splitlines()
-		finally:
-			popped = currently_rendering_ids.pop()
-			assert popped == id(obj)
+		if isinstance(obj, AsMultilineStringBase):
+			yield from obj._as_multiline_string_()
+		else:
+			yield from str(obj).splitlines()
 	finally:
 		if token2 is not None:
 			_currently_rendering_ids.reset(token2)
