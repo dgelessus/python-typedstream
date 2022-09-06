@@ -410,6 +410,35 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 
 
 @archiving.archived_class
+class NSCell(foundation.NSObject, advanced_repr.AsMultilineStringBase):
+	flags_unknown: typing.Tuple[int, int]
+	title: str
+	font: NSFont
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 65:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		flags_1, flags_2 = unarchiver.decode_values_of_types(b"i", b"i")
+		self.flags_unknown = (flags_1 & 0xffffffff, flags_2 & 0xffffffff)
+		
+		title, self.font, obj_3, obj_4 = unarchiver.decode_values_of_types(foundation.NSString, NSFont, b"@", b"@")
+		self.title = title.value
+		if obj_3 is not None:
+			raise ValueError("Unknown object 3 is not nil")
+		if obj_4 is not None:
+			raise ValueError("Unknown object 4 is not nil")
+	
+	def _as_multiline_string_header_(self) -> str:
+		return type(self).__name__
+	
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
+		yield f"flags: (0x{self.flags_unknown[0]:>08x}, 0x{self.flags_unknown[1]:>08x})"
+		yield f"title: {self.title!r}"
+		yield f"font: {self.font!r}"
+
+
+@archiving.archived_class
 class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	next_responder: typing.Any
 	
