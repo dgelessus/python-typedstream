@@ -328,6 +328,16 @@ class KnownArchivedObject(metaclass=_KnownArchivedClass):
 		# Raise something other than NotImplementedError - this method normally doesn't need to be implemented manually by the user.
 		# (PyCharm for example warns when a subclass doesn't override a method that raises NotImplementedError.)
 		raise AssertionError("This implementation should never be called. It should have been overridden automatically by __init_subclass__.")
+	
+	def __repr__(self) -> str:
+		class_name = type(self).archived_name.decode("ascii", errors="backslashreplace")
+		if KnownArchivedObject in type(self).__bases__:
+			# This is an instance of a root class (e. g. NSObject, Object),
+			# which generally contains no interesting data of its own,
+			# so omit the ellipsis here.
+			return f"<{class_name}>"
+		else:
+			return f"<{class_name} ...>"
 
 
 archived_classes_by_name: typing.Dict[bytes, typing.Type[KnownArchivedObject]] = {}
