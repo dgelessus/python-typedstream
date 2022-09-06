@@ -448,7 +448,7 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 		return cls(stream.TypedStreamReader.open(filename), close=True)
 	
 	def __init__(self, reader: stream.TypedStreamReader, *, close: bool = False) -> None:
-		"""Create an :class:`Unarchiver` that decodes data based on events from the given low-level :class:`~typedstream.archiver.TypedStreamReader`.
+		"""Create an :class:`Unarchiver` that decodes data based on events from the given low-level :class:`~typedstream.archiving.TypedStreamReader`.
 		
 		:param reader: The low-level reader from which to read the typedstream events.
 		:param close: Controls whether the low-level reader should also be closed when :meth:`close` is called.
@@ -477,7 +477,7 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 		"""Close this :class:`Unarchiver`.
 		
 		If ``close=True`` was passed when this :class:`Unarchiver` was created,
-		the underlying :class:`~typedstream.archiver.TypedStreamReader`'s ``close`` method is called as well.
+		the underlying :class:`~typedstream.archiving.TypedStreamReader`'s ``close`` method is called as well.
 		"""
 		
 		if self._close_reader:

@@ -20,13 +20,13 @@ import enum
 import typing
 
 from .. import advanced_repr
-from .. import archiver
+from .. import archiving
 from . import _common
 from . import foundation
 
 
-@archiver.struct_class
-class NSPoint(archiver.KnownStruct):
+@archiving.struct_class
+class NSPoint(archiving.KnownStruct):
 	struct_name = b"_NSPoint"
 	field_encodings = [b"f", b"f"]
 	
@@ -43,8 +43,8 @@ class NSPoint(archiver.KnownStruct):
 		return f"{type(self).__name__}(x={self.x!r}, y={self.y!r})"
 
 
-@archiver.struct_class
-class NSSize(archiver.KnownStruct):
+@archiving.struct_class
+class NSSize(archiving.KnownStruct):
 	struct_name = b"_NSSize"
 	field_encodings = [b"f", b"f"]
 	
@@ -61,8 +61,8 @@ class NSSize(archiver.KnownStruct):
 		return f"{type(self).__name__}(width={self.width!r}, height={self.height!r})"
 
 
-@archiver.struct_class
-class NSRect(archiver.KnownStruct):
+@archiving.struct_class
+class NSRect(archiving.KnownStruct):
 	struct_name = b"_NSRect"
 	field_encodings = [NSPoint.encoding, NSSize.encoding]
 	
@@ -79,7 +79,7 @@ class NSRect(archiver.KnownStruct):
 		return f"{type(self).__name__}(origin={self.origin!r}, size={self.size!r})"
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSColor(foundation.NSObject):
 	class Kind(enum.Enum):
 		CALIBRATED_RGBA = 1
@@ -170,7 +170,7 @@ class NSColor(foundation.NSObject):
 	kind: "NSColor.Kind"
 	value: "NSColor.Value"
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
@@ -203,12 +203,12 @@ class NSColor(foundation.NSObject):
 		return f"{type(self).__name__}(kind={self.kind.name}, value={self.value!r})"
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSCustomObject(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	class_name: str
 	object: typing.Any
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 41:
 			raise ValueError(f"Unsuppored version: {class_version}")
 		
@@ -228,13 +228,13 @@ class NSCustomObject(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		return f"{type(self).__name__}(class_name={self.class_name!r}, object={self.object!r})"
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSFont(foundation.NSObject):
 	name: str
 	size: float
 	flags_unknown: typing.Tuple[int, int, int, int]
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version not in {21, 30}:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
@@ -255,7 +255,7 @@ class NSFont(foundation.NSObject):
 		return f"{type(self).__name__}(name={self.name!r}, size={self.size!r}, flags_unknown=({flags_repr}))"
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	root: typing.Any
 	object_parents: "collections.OrderedDict[typing.Any, typing.Any]"
@@ -267,7 +267,7 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	next_object_id: int
 	target_framework: str
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 224:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
@@ -429,11 +429,11 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		return f"<{type(self).__name__}: root={self._oid_repr(self.root)}, object_parents={object_parents_repr}, object_names={object_names_repr}, unknown_set={self.unknown_set!r}, connections={connections_repr}, unknown_object={self.unknown_object!r}, object_ids={object_ids_repr}, next_object_id={self.next_object_id}, target_framework={self.target_framework!r}>"
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	next_responder: typing.Any
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
@@ -460,14 +460,14 @@ class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		return f"{type(self).__name__}(next_responder={next_responder_desc})"
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSView(NSResponder):
 	subviews: typing.List[typing.Any]
 	frame: NSRect
 	bounds: NSRect
 	superview: typing.Any
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 41:
 			raise ValueError(f"Unsupported version: {class_version}")
 		

@@ -20,22 +20,22 @@ import datetime
 import typing
 
 from .. import advanced_repr
-from .. import archiver
+from .. import archiving
 from . import _common
 
 
-@archiver.archived_class
-class NSObject(archiver.KnownArchivedObject):
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+@archiving.archived_class
+class NSObject(archiving.KnownArchivedObject):
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSData(NSObject):
 	data: bytes
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
@@ -45,20 +45,20 @@ class NSData(NSObject):
 		return f"{type(self).__name__}({self.data!r})"
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSMutableData(NSData):
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSDate(NSObject):
 	ABSOLUTE_REFERENCE_DATE: typing.ClassVar[datetime.datetime] = datetime.datetime(2001, 1, 1, tzinfo=datetime.timezone.utc)
 	
 	absolute_reference_date_offset: float
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
@@ -75,11 +75,11 @@ class NSDate(NSObject):
 		return f"{type(self).__name__}(absolute_reference_date_offset={self.absolute_reference_date_offset})"
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSString(NSObject):
 	value: str
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 1:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
@@ -89,21 +89,21 @@ class NSString(NSObject):
 		return f"{type(self).__name__}({self.value!r})"
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSMutableString(NSString):
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 1:
 			raise ValueError(f"Unsupported version: {class_version}")
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSValue(NSObject, advanced_repr.AsMultilineStringBase):
 	detect_backreferences = False
 	
 	type_encoding: bytes
 	value: typing.Any
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
@@ -120,16 +120,16 @@ class NSValue(NSObject, advanced_repr.AsMultilineStringBase):
 		return f"{type(self).__name__}(type_encoding={self.type_encoding!r}, value={self.value!r})"
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSNumber(NSValue):
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSArray(NSObject, _common.ArraySetBase):
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
@@ -141,16 +141,16 @@ class NSArray(NSObject, _common.ArraySetBase):
 			self.elements.append(unarchiver.decode_value_of_type(b"@"))
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSMutableArray(NSArray):
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSSet(NSObject, _common.ArraySetBase):
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
@@ -160,20 +160,20 @@ class NSSet(NSObject, _common.ArraySetBase):
 			self.elements.append(unarchiver.decode_value_of_type(b"@"))
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSMutableSet(NSSet):
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSDictionary(NSObject, advanced_repr.AsMultilineStringBase):
 	detect_backreferences = False
 	
 	contents: "collections.OrderedDict[typing.Any, typing.Any]"
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
@@ -206,8 +206,8 @@ class NSDictionary(NSObject, advanced_repr.AsMultilineStringBase):
 		return f"{type(self).__name__}({self.contents!r})"
 
 
-@archiver.archived_class
+@archiving.archived_class
 class NSMutableDictionary(NSDictionary):
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")

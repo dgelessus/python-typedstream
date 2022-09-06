@@ -17,7 +17,7 @@
 
 # "Unused" imports and star imports are ok in __init__.py.
 from .stream import InvalidTypedStreamError # noqa: F401
-from .archiver import * # noqa: F401, F403
+from .archiving import * # noqa: F401, F403
 
 # .types and its submodules are normally not used directly,
 # but it's important that they are imported,

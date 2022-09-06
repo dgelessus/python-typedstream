@@ -22,7 +22,7 @@ import typing
 
 from . import __version__
 from . import advanced_repr
-from . import archiver
+from . import archiving
 from . import stream
 
 
@@ -82,7 +82,7 @@ def do_read(ns: argparse.Namespace) -> typing.NoReturn:
 
 
 def dump_decoded_typedstream(ts: stream.TypedStreamReader) -> typing.Iterable[str]:
-	unarchiver = archiver.Unarchiver(ts)
+	unarchiver = archiving.Unarchiver(ts)
 	for obj in unarchiver.decode_all():
 		yield from advanced_repr.as_multiline_string(obj)
 

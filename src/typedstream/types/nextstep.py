@@ -19,20 +19,20 @@ import collections
 import typing
 
 from .. import advanced_repr
-from .. import archiver
+from .. import archiving
 from . import _common
 
 
-@archiver.archived_class
-class Object(archiver.KnownArchivedObject):
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+@archiving.archived_class
+class Object(archiving.KnownArchivedObject):
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 
 
-@archiver.archived_class
+@archiving.archived_class
 class List(Object, _common.ArraySetBase):
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
 			_, count = unarchiver.decode_values_of_types(b"i", b"i")
 			if count < 0:
@@ -53,7 +53,7 @@ class List(Object, _common.ArraySetBase):
 			raise ValueError(f"Unsupported version: {class_version}")
 
 
-@archiver.archived_class
+@archiving.archived_class
 class HashTable(Object, advanced_repr.AsMultilineStringBase):
 	detect_backreferences = False
 	
@@ -61,7 +61,7 @@ class HashTable(Object, advanced_repr.AsMultilineStringBase):
 	key_type_encoding: bytes
 	value_type_encoding: bytes
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
 			string_type_encoding = b"*"
 		elif class_version == 1:
@@ -99,7 +99,7 @@ class HashTable(Object, advanced_repr.AsMultilineStringBase):
 		return f"{type(self).__name__}(key_type_encoding={self.key_type_encoding!r}, value_type_encoding={self.value_type_encoding!r}, contents={self.contents!r})"
 
 
-@archiver.archived_class
+@archiving.archived_class
 class StreamTable(HashTable):
 	detect_backreferences = False
 	
@@ -121,11 +121,11 @@ class StreamTable(HashTable):
 			return self.archived_contents.keys()
 		
 		def __getitem__(self, key: typing.Any) -> typing.Any:
-			return archiver.unarchive_from_data(self.archived_contents[key])
+			return archiving.unarchive_from_data(self.archived_contents[key])
 	
 	unarchived_contents: "collections.Mapping[typing.Any, typing.Any]"
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 1:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
@@ -158,7 +158,7 @@ class StreamTable(HashTable):
 			yield from value_it
 
 
-@archiver.archived_class
+@archiving.archived_class
 class Storage(Object, advanced_repr.AsMultilineStringBase):
 	detect_backreferences = False
 	
@@ -166,7 +166,7 @@ class Storage(Object, advanced_repr.AsMultilineStringBase):
 	element_size: int
 	elements: typing.List[typing.Any]
 	
-	def _init_from_unarchiver_(self, unarchiver: archiver.Unarchiver, class_version: int) -> None:
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version == 0:
 			self.element_type_encoding, self.element_size, _, count = unarchiver.decode_values_of_types(b"*", b"i", b"i", b"i")
 			if count < 0:
