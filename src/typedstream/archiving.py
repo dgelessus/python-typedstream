@@ -684,7 +684,7 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 		
 		return ret
 	
-	def decode_values_of_types(self, *type_encodings: bytes) -> typing.Sequence[typing.Any]:
+	def decode_values_of_types(self, *type_encodings: typing.Union[bytes, typing.Type[KnownArchivedObject]]) -> typing.Sequence[typing.Any]:
 		"""Decode a group of typed values from the typedstream,
 		which must have the given type encodings.
 		
@@ -698,14 +698,26 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 		if not type_encodings:
 			raise TypeError("Expected at least one type encoding")
 		
+		expected_type_encodings = []
+		for enc in type_encodings:
+			if isinstance(enc, type):
+				expected_type_encodings.append(b"@")
+			else:
+				expected_type_encodings.append(enc)
+		
 		group = self.decode_typed_values()
 		
-		if not encodings.all_encodings_match_expected(group.encodings, type_encodings):
-			raise ValueError(f"Expected type encodings {type_encodings}, but got type encodings {group.encodings} in stream")
+		if not encodings.all_encodings_match_expected(group.encodings, expected_type_encodings):
+			raise ValueError(f"Expected type encodings {expected_type_encodings}, but got type encodings {group.encodings} in stream")
+		
+		for enc, obj in zip(type_encodings, group.values):
+			if obj is not None and isinstance(enc, type) and not isinstance(obj, enc):
+				assert issubclass(enc, KnownArchivedObject)
+				raise TypeError(f"Expected object of class {enc.archived_name!r}, but got class {type(obj)} in stream")
 		
 		return group.values
 	
-	def decode_value_of_type(self, type_encoding: bytes) -> typing.Any:
+	def decode_value_of_type(self, type_encoding: typing.Union[bytes, typing.Type[KnownArchivedObject]]) -> typing.Any:
 		"""Decode a single typed value from the typedstream,
 		which must have the given type encoding.
 		

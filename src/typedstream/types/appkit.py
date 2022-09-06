@@ -185,13 +185,7 @@ class NSColor(foundation.NSObject):
 			cyan, magenta, yellow, black, alpha = unarchiver.decode_values_of_types(b"f", b"f", b"f", b"f", b"f")
 			self.value = NSColor.CMYKAValue(cyan, magenta, yellow, black, alpha)
 		elif self.kind == NSColor.Kind.NAMED:
-			group, name, color = unarchiver.decode_values_of_types(b"@", b"@", b"@")
-			if not isinstance(group, foundation.NSString):
-				raise TypeError(f"Named NSColor group name must be a NSString, not {type(group)}")
-			if not isinstance(name, foundation.NSString):
-				raise TypeError(f"Named NSColor name must be a NSString, not {type(name)}")
-			if not isinstance(color, NSColor):
-				raise TypeError(f"Named NSColor color must be a NSColor, not {type(name)}")
+			group, name, color = unarchiver.decode_values_of_types(foundation.NSString, foundation.NSString, NSColor)
 			self.value = NSColor.NamedValue(group.value, name.value, color)
 		else:
 			raise AssertionError(f"Unhandled NSColor kind: {self.kind}")
@@ -212,9 +206,7 @@ class NSCustomObject(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		if class_version != 41:
 			raise ValueError(f"Unsuppored version: {class_version}")
 		
-		class_name, obj = unarchiver.decode_values_of_types(b"@", b"@")
-		if not isinstance(class_name, foundation.NSString):
-			raise TypeError(f"Class name must be a NSString, not {type(class_name)}")
+		class_name, obj = unarchiver.decode_values_of_types(foundation.NSString, b"@")
 		self.class_name = class_name.value
 		self.object = obj
 	
@@ -284,26 +276,17 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		names_count = unarchiver.decode_value_of_type(b"i")
 		self.object_names = collections.OrderedDict()
 		for i in range(names_count):
-			obj, name = unarchiver.decode_values_of_types(b"@", b"@")
+			obj, name = unarchiver.decode_values_of_types(b"@", foundation.NSString)
 			if obj in self.object_names:
 				raise ValueError(f"Duplicate object name entry {i} - this object already has a name")
-			if name is None:
-				# Sometimes the name is nil.
-				# No idea if this has any special significance
-				# or if it behaves any different than having no name entry at all.
-				self.object_names[obj] = None
-			elif isinstance(name, foundation.NSString):
-				self.object_names[obj] = name.value
-			else:
-				raise TypeError(f"Object name must be a NSString or nil, not {type(name)}")
+			
+			# Sometimes the name is nil.
+			# No idea if this has any special significance
+			# or if it behaves any different than having no name entry at all.
+			self.object_names[obj] = None if name is None else name.value
 		
-		self.unknown_set = unarchiver.decode_value_of_type(b"@")
-		
-		connections = unarchiver.decode_value_of_type(b"@")
-		if not isinstance(connections, foundation.NSArray):
-			raise TypeError(f"Connetions must be a NSArray, not {type(connections)}")
-		self.connections = connections.elements
-		
+		self.unknown_set = unarchiver.decode_value_of_type(foundation.NSSet)
+		self.connections = unarchiver.decode_value_of_type(foundation.NSArray).elements
 		self.unknown_object = unarchiver.decode_value_of_type(b"@")
 		
 		oids_count = unarchiver.decode_value_of_type(b"i")
@@ -320,10 +303,7 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		if unknown_int != 0:
 			raise ValueError(f"Unknown int field is not 0: {unknown_int}")
 		
-		target_framework = unarchiver.decode_value_of_type(b"@")
-		if not isinstance(target_framework, foundation.NSString):
-			raise TypeError(f"Target framework must be a NSString, not {type(target_framework)}")
-		self.target_framework = target_framework.value
+		self.target_framework = unarchiver.decode_value_of_type(foundation.NSString).value
 	
 	def _oid_repr(self, obj: typing.Any) -> str:
 		try:
@@ -437,10 +417,7 @@ class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
-		next_responder = unarchiver.decode_value_of_type(b"@")
-		if next_responder is not None and not isinstance(next_responder, NSResponder):
-			raise TypeError(f"Next responder must be a NSResponder or nil, not {type(next_responder)}")
-		self.next_responder = next_responder
+		self.next_responder = unarchiver.decode_value_of_type(NSResponder)
 	
 	def _as_multiline_string_header_(self) -> str:
 		return type(self).__name__
@@ -480,7 +457,7 @@ class NSView(NSResponder):
 			frame_x, frame_y, frame_width, frame_height,
 			bounds_x, bounds_y, bounds_width, bounds_height,
 		) = unarchiver.decode_values_of_types(
-			b"@", b"@", b"@", b"@",
+			foundation.NSArray, b"@", b"@", b"@",
 			b"f", b"f", b"f", b"f",
 			b"f", b"f", b"f", b"f",
 		)
@@ -488,8 +465,6 @@ class NSView(NSResponder):
 		if subviews is None:
 			self.subviews = []
 		else:
-			if not isinstance(subviews, foundation.NSArray):
-				raise TypeError(f"Subviews must be a NSArray or nil, not {type(subviews)}")
 			self.subviews = subviews.elements
 		
 		if obj2 is not None:
