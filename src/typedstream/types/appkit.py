@@ -467,25 +467,26 @@ class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 
 @archiving.archived_class
 class NSView(NSResponder):
+	flags: int
 	subviews: typing.List[typing.Any]
+	registered_dragged_types: typing.Set[str]
 	frame: NSRect
 	bounds: NSRect
 	superview: typing.Any
+	content_view: "NSView"
 	
 	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 41:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
-		unknown_int = unarchiver.decode_value_of_type(b"i")
-		if unknown_int != 0:
-			raise ValueError(f"Unknown int field is not 0: {unknown_int}")
+		self.flags = unarchiver.decode_value_of_type(b"i")
 		
 		(
-			subviews, obj2, obj3, obj4,
+			subviews, obj2, obj3, registered_dragged_types,
 			frame_x, frame_y, frame_width, frame_height,
 			bounds_x, bounds_y, bounds_width, bounds_height,
 		) = unarchiver.decode_values_of_types(
-			foundation.NSArray, b"@", b"@", b"@",
+			foundation.NSArray, b"@", b"@", foundation.NSSet,
 			b"f", b"f", b"f", b"f",
 			b"f", b"f", b"f", b"f",
 		)
@@ -499,8 +500,14 @@ class NSView(NSResponder):
 			raise ValueError("Unknown object 2 is not nil")
 		if obj3 is not None:
 			raise ValueError("Unknown object 3 is not nil")
-		if obj4 is not None:
-			raise ValueError("Unknown object 4 is not nil")
+		
+		self.registered_dragged_types = set()
+		if registered_dragged_types is not None:
+			for tp in registered_dragged_types.elements:
+				if not isinstance(tp, foundation.NSString):
+					raise TypeError(f"NSView dragged types must be instances of NSString, not {type(tp).__name__}")
+				
+				self.registered_dragged_types.add(tp.value)
 		
 		self.frame = NSRect(NSPoint(frame_x, frame_y), NSSize(frame_width, frame_height))
 		self.bounds = NSRect(NSPoint(bounds_x, bounds_y), NSSize(bounds_width, bounds_height))
@@ -513,9 +520,7 @@ class NSView(NSResponder):
 		obj6 = unarchiver.decode_value_of_type(b"@")
 		if obj6 is not None:
 			raise ValueError("Unknown object 6 is not nil")
-		obj7 = unarchiver.decode_value_of_type(b"@")
-		if obj7 is not None:
-			raise ValueError("Unknown object 7 is not nil")
+		self.content_view = unarchiver.decode_value_of_type(NSView)
 		obj8 = unarchiver.decode_value_of_type(b"@")
 		if obj8 is not None:
 			raise ValueError("Unknown object 8 is not nil")
@@ -523,11 +528,18 @@ class NSView(NSResponder):
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		yield from super()._as_multiline_string_body_()
 		
+		yield f"flags: 0x{self.flags:>08x}"
+		
 		if self.subviews:
 			yield f"{len(self.subviews)} {'subview' if len(self.subviews) == 1 else 'subviews'}:"
 			for subview in self.subviews:
 				for line in advanced_repr.as_multiline_string(subview):
 					yield "\t" + line
+		
+		if self.registered_dragged_types:
+			yield f"{len(self.registered_dragged_types)} registered dragged types:"
+			for tp in self.registered_dragged_types:
+				yield f"\t{tp!r}"
 		
 		yield f"frame: {self.frame!r}"
 		yield f"bounds: {self.bounds!r}"
@@ -537,3 +549,6 @@ class NSView(NSResponder):
 		else:
 			superview_desc = f"<{_common.object_class_name(self.superview)}>"
 		yield f"superview: {superview_desc}"
+		
+		if self.content_view is not None:
+			yield f"content view: <{_common.object_class_name(self.content_view)}>"
