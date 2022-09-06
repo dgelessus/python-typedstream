@@ -94,7 +94,7 @@ class AsMultilineStringBase(object):
 		"""
 		
 		first = self._as_multiline_string_header_()
-		if id(self) in _currently_rendering_ids.get():
+		if id(self) in _currently_rendering_ids.get()[:-1]: # last element of _currently_rendering_ids is always id(self)
 			yield first + " (circular reference)"
 		elif type(self).detect_backreferences and id(self) in _already_rendered_ids.get():
 			yield first + " (backreference)"
@@ -115,11 +115,7 @@ class AsMultilineStringBase(object):
 		return "\n".join(self._as_multiline_string_())
 
 
-def as_multiline_string(
-	obj: object,
-	*,
-	calling_self: typing.Optional[object] = None,
-) -> typing.Iterable[str]:
+def as_multiline_string(obj: object) -> typing.Iterable[str]:
 	"""Convert an object to a multiline string representation.
 	
 	If the object has an :meth:`~AsMultilineStringBase._as_multiline_string_` method,
@@ -129,9 +125,6 @@ def as_multiline_string(
 	and then split into an iterable of lines.
 	
 	:param obj: The object to represent.
-	:param calling_self: The object that is asking for the representation.
-		This must be set when calling from an :meth:`~AsMultilineStringBase._as_multiline_string_` implementation,
-		so that repeated and recursive calls are tracked properly.
 	:return: The string representation as an iterable of lines (line terminators not included).
 	"""
 	
@@ -151,19 +144,19 @@ def as_multiline_string(
 			currently_rendering_ids = []
 			token2 = _currently_rendering_ids.set(currently_rendering_ids)
 		
-		if isinstance(obj, AsMultilineStringBase):
-			if calling_self is not None:
-				already_rendered_ids.add(id(calling_self))
-				currently_rendering_ids.append(id(calling_self))
-			
-			try:
+		if currently_rendering_ids:
+			already_rendered_ids.add(currently_rendering_ids[-1])
+		
+		currently_rendering_ids.append(id(obj))
+		
+		try:
+			if isinstance(obj, AsMultilineStringBase):
 				yield from obj._as_multiline_string_()
-			finally:
-				if calling_self is not None:
-					popped = currently_rendering_ids.pop()
-					assert popped == id(calling_self)
-		else:
-			yield from str(obj).splitlines()
+			else:
+				yield from str(obj).splitlines()
+		finally:
+			popped = currently_rendering_ids.pop()
+			assert popped == id(obj)
 	finally:
 		if token2 is not None:
 			_currently_rendering_ids.reset(token2)

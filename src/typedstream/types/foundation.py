@@ -111,7 +111,7 @@ class NSValue(NSObject, advanced_repr.AsMultilineStringBase):
 		self.value = unarchiver.decode_value_of_type(self.type_encoding)
 	
 	def _as_multiline_string_(self) -> typing.Iterable[str]:
-		value_it = iter(advanced_repr.as_multiline_string(self.value, calling_self=self))
+		value_it = iter(advanced_repr.as_multiline_string(self.value))
 		yield f"{type(self).__name__}, type {self.type_encoding!r}: " + next(value_it, "")
 		for line in value_it:
 			yield "\t" + line
@@ -198,7 +198,7 @@ class NSDictionary(NSObject, advanced_repr.AsMultilineStringBase):
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for key, value in self.contents.items():
-			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self))
+			value_it = iter(advanced_repr.as_multiline_string(value))
 			yield f"{key!r}: " + next(value_it, "")
 			yield from value_it
 	

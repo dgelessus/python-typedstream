@@ -91,7 +91,7 @@ class HashTable(Object, advanced_repr.AsMultilineStringBase):
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for key, value in self.contents.items():
-			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self))
+			value_it = iter(advanced_repr.as_multiline_string(value))
 			yield f"{key!r}: " + next(value_it, "")
 			yield from value_it
 	
@@ -153,7 +153,7 @@ class StreamTable(HashTable):
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for key, value in self.unarchived_contents.items():
-			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self))
+			value_it = iter(advanced_repr.as_multiline_string(value))
 			yield f"{key!r}: " + next(value_it, "")
 			yield from value_it
 
@@ -198,7 +198,7 @@ class Storage(Object, advanced_repr.AsMultilineStringBase):
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for element in self.elements:
-			yield from advanced_repr.as_multiline_string(element, calling_self=self)
+			yield from advanced_repr.as_multiline_string(element)
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}(element_type_encoding={self.element_type_encoding!r}, element_size={self.element_size!r}, elements={self.elements!r})"

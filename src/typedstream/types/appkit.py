@@ -219,7 +219,7 @@ class NSCustomObject(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		self.object = obj
 	
 	def _as_multiline_string_(self) -> typing.Iterable[str]:
-		it = iter(advanced_repr.as_multiline_string(self.object, calling_self=self))
+		it = iter(advanced_repr.as_multiline_string(self.object))
 		yield f"{type(self).__name__}, class {self.class_name}, object: " + next(it, "")
 		for line in it:
 			yield "\t" + line
@@ -405,18 +405,18 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			else:
 				oid_desc += f" {name!r}"
 			
-			obj_it = iter(advanced_repr.as_multiline_string(obj, calling_self=self))
+			obj_it = iter(advanced_repr.as_multiline_string(obj))
 			yield f"\t{oid_desc}: {next(obj_it)}"
 			for line in obj_it:
 				yield "\t" + line
 		
 		yield f"next object ID: #{self.next_object_id}"
 		
-		unknown_set_it = iter(advanced_repr.as_multiline_string(self.unknown_set, calling_self=self))
+		unknown_set_it = iter(advanced_repr.as_multiline_string(self.unknown_set))
 		yield f"unknown set: {next(unknown_set_it)}"
 		yield from unknown_set_it
 		
-		unknown_object_it = iter(advanced_repr.as_multiline_string(self.unknown_object, calling_self=self))
+		unknown_object_it = iter(advanced_repr.as_multiline_string(self.unknown_object))
 		yield f"unknown object: {next(unknown_object_it)}"
 		yield from unknown_object_it
 	
@@ -523,7 +523,7 @@ class NSView(NSResponder):
 		if self.subviews:
 			yield f"{len(self.subviews)} {'subview' if len(self.subviews) == 1 else 'subviews'}:"
 			for subview in self.subviews:
-				for line in advanced_repr.as_multiline_string(subview, calling_self=self):
+				for line in advanced_repr.as_multiline_string(subview):
 					yield "\t" + line
 		
 		yield f"frame: {self.frame!r}"

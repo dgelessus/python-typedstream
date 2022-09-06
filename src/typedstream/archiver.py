@@ -82,7 +82,7 @@ class TypedGroup(advanced_repr.AsMultilineStringBase):
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for encoding, value in zip(self.encodings, self.values):
-			value_it = iter(advanced_repr.as_multiline_string(value, calling_self=self))
+			value_it = iter(advanced_repr.as_multiline_string(value))
 			yield f"type {encoding!r}: {next(value_it)}"
 			yield from value_it
 
@@ -111,7 +111,7 @@ class TypedValue(TypedGroup):
 		return f"{type(self).__module__}.{type(self).__qualname__}(encoding={self.encoding!r}, value={self.value!r})"
 	
 	def _as_multiline_string_(self) -> typing.Iterable[str]:
-		value_it = iter(advanced_repr.as_multiline_string(self.value, calling_self=self))
+		value_it = iter(advanced_repr.as_multiline_string(self.value))
 		yield f"type {self.encoding!r}: {next(value_it)}"
 		yield from value_it
 
@@ -140,7 +140,7 @@ class Array(advanced_repr.AsMultilineStringBase):
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		if not isinstance(self.elements, bytes): # Byte arrays are displayed entirely in the header
 			for element in self.elements:
-				yield from advanced_repr.as_multiline_string(element, calling_self=self)
+				yield from advanced_repr.as_multiline_string(element)
 
 
 class Class(object):
@@ -202,11 +202,11 @@ class GenericArchivedObject(advanced_repr.AsMultilineStringBase):
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		if self.super_object is not None:
-			super_object_it = iter(advanced_repr.as_multiline_string(self.super_object, calling_self=self))
+			super_object_it = iter(advanced_repr.as_multiline_string(self.super_object))
 			yield f"super object: {next(super_object_it)}"
 			yield from super_object_it
 		for value in self.contents:
-			yield from advanced_repr.as_multiline_string(value, calling_self=self)
+			yield from advanced_repr.as_multiline_string(value)
 
 
 # False positive from flake8-bugbear, see:
@@ -373,7 +373,7 @@ class GenericStruct(advanced_repr.AsMultilineStringBase):
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for field_value in self.fields:
-			yield from advanced_repr.as_multiline_string(field_value, calling_self=self)
+			yield from advanced_repr.as_multiline_string(field_value)
 
 
 _KS = typing.TypeVar("_KS", bound="KnownStruct")

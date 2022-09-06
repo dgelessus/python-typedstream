@@ -47,7 +47,7 @@ class ArraySetBase(advanced_repr.AsMultilineStringBase):
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for element in self.elements:
-			yield from advanced_repr.as_multiline_string(element, calling_self=self)
+			yield from advanced_repr.as_multiline_string(element)
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}({self.elements!r})"
