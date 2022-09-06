@@ -469,7 +469,7 @@ class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 class NSView(NSResponder):
 	flags: int
 	subviews: "typing.List[NSView]"
-	registered_dragged_types: typing.Set[str]
+	registered_dragged_types: typing.List[str]
 	frame: NSRect
 	bounds: NSRect
 	superview: "typing.Optional[NSView]"
@@ -504,13 +504,13 @@ class NSView(NSResponder):
 		if obj3 is not None:
 			raise ValueError("Unknown object 3 is not nil")
 		
-		self.registered_dragged_types = set()
+		self.registered_dragged_types = []
 		if registered_dragged_types is not None:
 			for tp in registered_dragged_types.elements:
 				if not isinstance(tp, foundation.NSString):
 					raise TypeError(f"NSView dragged types must be instances of NSString, not {type(tp).__name__}")
 				
-				self.registered_dragged_types.add(tp.value)
+				self.registered_dragged_types.append(tp.value)
 		
 		self.frame = NSRect(NSPoint(frame_x, frame_y), NSSize(frame_width, frame_height))
 		self.bounds = NSRect(NSPoint(bounds_x, bounds_y), NSSize(bounds_width, bounds_height))
