@@ -468,11 +468,11 @@ class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 @archiving.archived_class
 class NSView(NSResponder):
 	flags: int
-	subviews: typing.List[typing.Any]
+	subviews: "typing.List[NSView]"
 	registered_dragged_types: typing.Set[str]
 	frame: NSRect
 	bounds: NSRect
-	superview: typing.Any
+	superview: "typing.Optional[NSView]"
 	content_view: "NSView"
 	
 	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
@@ -491,10 +491,13 @@ class NSView(NSResponder):
 			b"f", b"f", b"f", b"f",
 		)
 		
-		if subviews is None:
-			self.subviews = []
-		else:
-			self.subviews = subviews.elements
+		self.subviews = []
+		if subviews is not None:
+			for subview in subviews.elements:
+				if not isinstance(subview, NSView):
+					raise TypeError(f"NSView subviews must be instances of NSView, not {type(subview).__name__}")
+				
+				self.subviews.append(subview)
 		
 		if obj2 is not None:
 			raise ValueError("Unknown object 2 is not nil")
@@ -512,10 +515,7 @@ class NSView(NSResponder):
 		self.frame = NSRect(NSPoint(frame_x, frame_y), NSSize(frame_width, frame_height))
 		self.bounds = NSRect(NSPoint(bounds_x, bounds_y), NSSize(bounds_width, bounds_height))
 		
-		superview = unarchiver.decode_value_of_type(b"@")
-		if superview is not None and not isinstance(superview, NSView):
-			raise TypeError(f"Superview must be a NSView or nil, not {type(superview)}")
-		self.superview = superview
+		self.superview = unarchiver.decode_value_of_type(NSView)
 		
 		obj6 = unarchiver.decode_value_of_type(b"@")
 		if obj6 is not None:
