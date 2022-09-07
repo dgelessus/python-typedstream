@@ -424,7 +424,7 @@ _MODIFIER_KEY_NAMES = collections.OrderedDict([
 
 @archiving.archived_class
 class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
-	menu: typing.Any
+	menu: "NSMenu"
 	flags: int
 	title: str
 	key_equivalent: str
@@ -436,13 +436,13 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	action: stream.Selector
 	int_2: int
 	target: typing.Any
-	submenu: typing.Any
+	submenu: "typing.Optional[NSMenu]"
 	
 	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version not in {505, 671}:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
-		self.menu = unarchiver.decode_value_of_type(b"@")
+		self.menu = unarchiver.decode_value_of_type(NSMenu)
 		(
 			flags, title, key_equivalent, modifier_flags,
 			int_1, state,
@@ -469,7 +469,7 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			raise ValueError("Unknown object 2 is not nil")
 		
 		self.target = unarchiver.decode_value_of_type(b"@")
-		self.submenu = unarchiver.decode_value_of_type(b"@")
+		self.submenu = unarchiver.decode_value_of_type(NSMenu)
 	
 	def _as_multiline_string_header_(self) -> str:
 		header = f"{type(self).__name__} {self.title!r}"
@@ -478,11 +478,7 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		return header
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
-		if self.menu is None:
-			menu_desc = "None"
-		else:
-			menu_desc = f"<{_common.object_class_name(self.menu)}>"
-		yield f"in menu: {menu_desc}"
+		yield f"in menu: <{_common.object_class_name(self.menu)} {self.menu.title!r}>"
 		
 		if self.flags != 0:
 			yield f"flags: 0x{self.flags:>08x}"
@@ -516,6 +512,55 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			submenu_it = iter(advanced_repr.as_multiline_string(self.submenu))
 			yield f"submenu: {next(submenu_it)}"
 			yield from submenu_it
+
+
+@archiving.archived_class
+class NSMenu(foundation.NSObject, advanced_repr.AsMultilineStringBase):
+	title: str
+	items: typing.List[NSMenuItem]
+	identifier: typing.Optional[str]
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 204:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		unknown_int, title, items, identifier = unarchiver.decode_values_of_types(b"i", foundation.NSString, foundation.NSArray, foundation.NSString)
+		
+		if unknown_int != 0:
+			raise ValueError(f"Unknown int is not 0: {unknown_int}")
+		
+		self.title = title.value
+		
+		self.items = []
+		for item in items.elements:
+			if not isinstance(item, NSMenuItem):
+				raise TypeError(f"NSMenu items must be instances of NSMenuItem, not {type(item).__name__}")
+			
+			self.items.append(item)
+		
+		if identifier is None:
+			self.identifier = None
+		else:
+			self.identifier = identifier.value
+	
+	def _as_multiline_string_header_(self) -> str:
+		header = f"{type(self).__name__} {self.title!r}"
+		
+		if self.identifier is not None:
+			header += f" ({self.identifier!r})"
+		
+		if not self.items:
+			header += ", no items"
+		elif len(self.items) == 1:
+			header += ", 1 item"
+		else:
+			header += f", {len(self.items)} items"
+		
+		return header
+	
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
+		for item in self.items:
+			yield from advanced_repr.as_multiline_string(item)
 
 
 @archiving.archived_class
