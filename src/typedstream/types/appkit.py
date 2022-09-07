@@ -602,6 +602,13 @@ class NSComboBoxCell(NSTextFieldCell):
 
 
 @archiving.archived_class
+class NSTableHeaderCell(NSTextFieldCell):
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 28:
+			raise ValueError(f"Unsupported version: {class_version}")
+
+
+@archiving.archived_class
 class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	next_responder: typing.Any
 	
