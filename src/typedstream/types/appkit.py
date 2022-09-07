@@ -467,6 +467,7 @@ class NSButtonCell(NSActionCell):
 	shorts_unknown = typing.Tuple[int, int]
 	type: NSButtonType
 	flags: int
+	key_equivalent: str
 	image_1: typing.Any
 	image_2_or_font: typing.Any
 	
@@ -476,7 +477,7 @@ class NSButtonCell(NSActionCell):
 		
 		(
 			short_1, short_2, button_type, flags,
-			string_1, string_2, self.image_1, self.image_2_or_font, unknown_object,
+			string_1, key_equivalent, self.image_1, self.image_2_or_font, unknown_object,
 		) = unarchiver.decode_values_of_types(
 			b"s", b"s", b"i", b"i",
 			foundation.NSString, foundation.NSString, b"@", b"@", b"@",
@@ -491,8 +492,9 @@ class NSButtonCell(NSActionCell):
 		
 		if string_1 is not None and string_1.value:
 			raise ValueError(f"Unknown string 1 is not nil or empty: {string_1}")
-		if string_2 is not None and string_2.value:
-			raise ValueError(f"Unknown string 2 is not nil or empty: {string_2}")
+		
+		self.key_equivalent = key_equivalent.value
+		
 		if unknown_object is not None:
 			raise ValueError("Unknown object is not nil")
 	
@@ -503,6 +505,8 @@ class NSButtonCell(NSActionCell):
 		yield f"button type: {self.type.name}"
 		yield f"button flags: 0x{self.flags:>08x}"
 		
+		if self.key_equivalent:
+			yield f"key equivalent: {self.key_equivalent!r}"
 		if self.image_1 is not None:
 			image_1_it = iter(advanced_repr.as_multiline_string(self.image_1))
 			yield f"image 1: {next(image_1_it)}"
