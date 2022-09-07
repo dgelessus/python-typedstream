@@ -425,7 +425,7 @@ _MODIFIER_KEY_NAMES = collections.OrderedDict([
 @archiving.archived_class
 class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	menu: typing.Any
-	is_separator: bool
+	flags: int
 	title: str
 	key_equivalent: str
 	modifier_flags: NSEventModifierFlags
@@ -434,6 +434,7 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	off_state_image: typing.Any
 	mixed_state_image: typing.Any
 	action: stream.Selector
+	int_2: int
 	target: typing.Any
 	submenu: typing.Any
 	
@@ -446,7 +447,7 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			flags, title, key_equivalent, modifier_flags,
 			int_1, state,
 			obj_1, self.on_state_image, self.off_state_image, self.mixed_state_image,
-			self.action, int_2, obj_2,
+			self.action, self.int_2, obj_2,
 		) = unarchiver.decode_values_of_types(
 			b"i", foundation.NSString, foundation.NSString, b"I",
 			b"I", b"i",
@@ -454,13 +455,7 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			b":", b"i", b"@",
 		)
 		
-		if flags == 0:
-			self.is_separator = False
-		elif flags == 0x40000000:
-			self.is_separator = True
-		else:
-			raise ValueError(f"Unexpected value for NSMenuItem flags: 0x{flags & 0xffffffff:>08x}")
-		
+		self.flags = flags & 0xffffffff
 		self.title = title.value
 		self.key_equivalent = key_equivalent.value
 		self.modifier_flags = NSEventModifierFlags(modifier_flags)
@@ -470,8 +465,6 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			raise ValueError(f"Unknown int 1 is not 0x7fffffff: {int_1}")
 		if obj_1 is not None:
 			raise ValueError("Unknown object 1 is not nil")
-		if int_2 != 0:
-			raise ValueError(f"Unknown int 2 is not 0: {int_2}")
 		if obj_2 is not None:
 			raise ValueError("Unknown object 2 is not nil")
 		
@@ -480,8 +473,6 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	
 	def _as_multiline_string_header_(self) -> str:
 		header = f"{type(self).__name__} {self.title!r}"
-		if self.is_separator:
-			header += " (separator)"
 		if self.key_equivalent:
 			header += f" ({self.modifier_flags!s}+{self.key_equivalent!r})"
 		return header
@@ -492,6 +483,9 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		else:
 			menu_desc = f"<{_common.object_class_name(self.menu)}>"
 		yield f"in menu: {menu_desc}"
+		
+		if self.flags != 0:
+			yield f"flags: 0x{self.flags:>08x}"
 		
 		if self.state != NSControlStateValue.off:
 			yield f"initial state: {self.state.name}"
@@ -513,6 +507,8 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		
 		if self.action is not None:
 			yield f"action: {self.action}"
+		if self.int_2 != 0:
+			yield f"unknown int 2: {self.int_2}"
 		if self.target is not None:
 			yield f"target: <{_common.object_class_name(self.target)}>"
 		
