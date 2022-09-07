@@ -518,6 +518,33 @@ class NSButtonCell(NSActionCell):
 
 
 @archiving.archived_class
+class NSTextFieldCell(NSActionCell):
+	draws_background: bool
+	background_color: NSColor
+	text_color: NSColor
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 62:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		draws_background, self.background_color, self.text_color = unarchiver.decode_values_of_types(b"c", NSColor, NSColor)
+		
+		if draws_background == 0:
+			self.draws_background = False
+		elif draws_background == 1:
+			self.draws_background = True
+		else:
+			raise ValueError(f"Unexpected value for boolean: {draws_background}")
+	
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
+		yield from super()._as_multiline_string_body_()
+		
+		yield f"draws background: {self.draws_background}"
+		yield f"background color: {self.background_color}"
+		yield f"text color: {self.text_color}"
+
+
+@archiving.archived_class
 class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	next_responder: typing.Any
 	
