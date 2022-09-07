@@ -492,17 +492,21 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		else:
 			menu_desc = f"<{_common.object_class_name(self.menu)}>"
 		yield f"in menu: {menu_desc}"
-		yield f"state: {self.state.name}"
 		
-		if self.on_state_image is not None:
+		if self.state != NSControlStateValue.off:
+			yield f"initial state: {self.state.name}"
+		
+		if not isinstance(self.on_state_image, NSCustomResource) or self.on_state_image.class_name != "NSImage" or self.on_state_image.resource_name != "NSMenuCheckmark":
 			on_state_image_it = iter(advanced_repr.as_multiline_string(self.on_state_image))
 			yield f"on state image: {next(on_state_image_it)}"
 			yield from on_state_image_it
+		
 		if self.off_state_image is not None:
 			off_state_image_it = iter(advanced_repr.as_multiline_string(self.off_state_image))
 			yield f"off state image: {next(off_state_image_it)}"
 			yield from off_state_image_it
-		if self.mixed_state_image is not None:
+		
+		if not isinstance(self.mixed_state_image, NSCustomResource) or self.mixed_state_image.class_name != "NSImage" or self.mixed_state_image.resource_name != "NSMenuMixedState":
 			mixed_state_image_it = iter(advanced_repr.as_multiline_string(self.mixed_state_image))
 			yield f"mixed state image: {next(mixed_state_image_it)}"
 			yield from mixed_state_image_it
