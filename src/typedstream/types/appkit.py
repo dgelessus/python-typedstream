@@ -21,6 +21,7 @@ import typing
 
 from .. import advanced_repr
 from .. import archiving
+from .. import stream
 from . import _common
 from . import foundation
 
@@ -452,6 +453,40 @@ class NSCell(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		yield f"flags: (0x{self.flags_unknown[0]:>08x}, 0x{self.flags_unknown[1]:>08x})"
 		yield f"title/image: {self.title_or_image!r}"
 		yield f"font: {self.font!r}"
+
+
+@archiving.archived_class
+class NSActionCell(NSCell):
+	action: typing.Optional[stream.Selector]
+	target: typing.Any
+	control_view: "typing.Optional[NSView]"
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 17:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		unknown_int, self.action = unarchiver.decode_values_of_types(b"i", b":")
+		if unknown_int != 0:
+			raise ValueError(f"Unknown integer is not 0: {unknown_int}")
+		
+		self.target = unarchiver.decode_value_of_type(b"@")
+		
+		self.control_view = unarchiver.decode_value_of_type(NSView)
+	
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
+		yield from super()._as_multiline_string_body_()
+		
+		if self.action is not None:
+			yield f"action: {self.action!r}"
+		
+		if self.target is not None:
+			yield f"target: <{_common.object_class_name(self.target)}>"
+		
+		if self.control_view is None:
+			control_view_desc = "None"
+		else:
+			control_view_desc = f"<{_common.object_class_name(self.control_view)}>"
+		yield f"control view: {control_view_desc}"
 
 
 @archiving.archived_class
