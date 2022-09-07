@@ -489,6 +489,70 @@ class NSActionCell(NSCell):
 		yield f"control view: {control_view_desc}"
 
 
+class NSButtonType(enum.Enum):
+	momentary_light = 0
+	push_on_push_off = 1
+	toggle = 2
+	switch = 3
+	radio = 4
+	momentary_change = 5
+	on_off = 6
+	momentary_push_in = 7
+	accelerator = 8
+	multi_level_accelerator = 9
+
+
+@archiving.archived_class
+class NSButtonCell(NSActionCell):
+	shorts_unknown = typing.Tuple[int, int]
+	type: NSButtonType
+	flags: int
+	image_1: typing.Any
+	image_2_or_font: typing.Any
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 63:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		(
+			short_1, short_2, button_type, flags,
+			string_1, string_2, self.image_1, self.image_2_or_font, unknown_object,
+		) = unarchiver.decode_values_of_types(
+			b"s", b"s", b"i", b"i",
+			foundation.NSString, foundation.NSString, b"@", b"@", b"@",
+		)
+		
+		self.shorts_unknown = (short_1, short_2)
+		if self.shorts_unknown not in {(200, 25), (400, 75)}:
+			raise ValueError(f"Unexpected value for unknown shorts: {self.shorts_unknown}")
+		
+		self.type = NSButtonType(button_type)
+		self.flags = flags & 0xffffffff
+		
+		if string_1 is not None and string_1.value:
+			raise ValueError(f"Unknown string 1 is not nil or empty: {string_1}")
+		if string_2 is not None and string_2.value:
+			raise ValueError(f"Unknown string 2 is not nil or empty: {string_2}")
+		if unknown_object is not None:
+			raise ValueError("Unknown object is not nil")
+	
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
+		yield from super()._as_multiline_string_body_()
+		
+		yield f"unknown shorts: {self.shorts_unknown!r}"
+		yield f"button type: {self.type.name}"
+		yield f"button flags: 0x{self.flags:>08x}"
+		
+		if self.image_1 is not None:
+			image_1_it = iter(advanced_repr.as_multiline_string(self.image_1))
+			yield f"image 1: {next(image_1_it)}"
+			yield from image_1_it
+		if self.image_2_or_font is not None:
+			image_2_it = iter(advanced_repr.as_multiline_string(self.image_2_or_font))
+			yield f"image 2 or font: {next(image_2_it)}"
+			yield from image_2_it
+
+
 @archiving.archived_class
 class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	next_responder: typing.Any
