@@ -545,6 +545,63 @@ class NSTextFieldCell(NSActionCell):
 
 
 @archiving.archived_class
+class NSComboBoxCell(NSTextFieldCell):
+	number_of_visible_items: int
+	values: typing.List[typing.Any]
+	combo_box: "NSView"
+	button_cell: NSButtonCell
+	table_view: "NSView"
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 2:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		self.number_of_visible_items, bool_1, bool_2, bool_3 = unarchiver.decode_values_of_types(b"i", b"c", b"c", b"c")
+		
+		if bool_1 != 1:
+			raise ValueError(f"Unknown boolean 1 is not 1: {bool_1}")
+		if bool_2 != 1:
+			raise ValueError(f"Unknown boolean 2 is not 1: {bool_2}")
+		if bool_3 != 0:
+			raise ValueError(f"Unknown boolean 3 is not 0: {bool_3}")
+		
+		self.values = unarchiver.decode_value_of_type(foundation.NSArray).elements
+		
+		unknown_object = unarchiver.decode_value_of_type(b"@")
+		if unknown_object is not None:
+			raise ValueError("Unknown object is not nil")
+		
+		self.combo_box = unarchiver.decode_value_of_type(NSView)
+		self.button_cell = unarchiver.decode_value_of_type(NSButtonCell)
+		self.table_view = unarchiver.decode_value_of_type(NSView)
+	
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
+		yield from super()._as_multiline_string_body_()
+		
+		yield f"number of visible items: {self.number_of_visible_items}"
+		
+		if self.values:
+			if len(self.values) == 1:
+				yield "1 value:"
+			else:
+				yield f"{len(self.values)} values:"
+			
+			for value in self.values:
+				for line in advanced_repr.as_multiline_string(value):
+					yield "\t" + line
+		
+		yield f"combo box: <{_common.object_class_name(self.combo_box)}>"
+		
+		button_cell_it = iter(advanced_repr.as_multiline_string(self.button_cell))
+		yield f"button cell: {next(button_cell_it)}"
+		yield from button_cell_it
+		
+		table_view_it = iter(advanced_repr.as_multiline_string(self.table_view))
+		yield f"table view: {next(table_view_it)}"
+		yield from table_view_it
+
+
+@archiving.archived_class
 class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	next_responder: typing.Any
 	
