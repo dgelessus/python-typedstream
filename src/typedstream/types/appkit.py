@@ -40,6 +40,11 @@ class NSPoint(archiving.KnownStruct):
 		self.x = x
 		self.y = y
 	
+	def __str__(self) -> str:
+		x = int(self.x) if int(self.x) == self.x else self.x
+		y = int(self.y) if int(self.y) == self.y else self.y
+		return f"{{{x}, {y}}}"
+	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}(x={self.x!r}, y={self.y!r})"
 
@@ -58,6 +63,11 @@ class NSSize(archiving.KnownStruct):
 		self.width = width
 		self.height = height
 	
+	def __str__(self) -> str:
+		width = int(self.width) if int(self.width) == self.width else self.width
+		height = int(self.height) if int(self.height) == self.height else self.height
+		return f"{{{width}, {height}}}"
+	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}(width={self.width!r}, height={self.height!r})"
 
@@ -75,6 +85,9 @@ class NSRect(archiving.KnownStruct):
 		
 		self.origin = origin
 		self.size = size
+	
+	def __str__(self) -> str:
+		return f"{{{self.origin}, {self.size}}}"
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}(origin={self.origin!r}, size={self.size!r})"
@@ -671,8 +684,8 @@ class NSView(NSResponder):
 			for tp in self.registered_dragged_types:
 				yield f"\t{tp!r}"
 		
-		yield f"frame: {self.frame!r}"
-		yield f"bounds: {self.bounds!r}"
+		yield f"frame: {self.frame}"
+		yield f"bounds: {self.bounds}"
 		
 		if self.superview is None:
 			superview_desc = "None"
