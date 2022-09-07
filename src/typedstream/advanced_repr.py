@@ -128,6 +128,7 @@ def as_multiline_string(obj: object) -> typing.Iterable[str]:
 	:return: The string representation as an iterable of lines (line terminators not included).
 	"""
 	
+	already_rendered_ids: typing.Optional[typing.Set[int]] = None
 	token: typing.Optional[contextvars.Token] = None
 	token2: typing.Optional[contextvars.Token] = None
 	
@@ -152,6 +153,9 @@ def as_multiline_string(obj: object) -> typing.Iterable[str]:
 		else:
 			yield from str(obj).splitlines()
 	finally:
+		if already_rendered_ids is not None:
+			already_rendered_ids.add(id(obj))
+		
 		if token2 is not None:
 			_currently_rendering_ids.reset(token2)
 		
