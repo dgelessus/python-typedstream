@@ -373,6 +373,151 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		return f"<{type(self).__name__}: root={self._oid_repr(self.root)}, object_parents={object_parents_repr}, object_names={object_names_repr}, unknown_set={self.unknown_set!r}, connections={connections_repr}, unknown_object={self.unknown_object!r}, object_ids={object_ids_repr}, next_object_id={self.next_object_id}, target_framework={self.target_framework!r}>"
 
 
+class NSControlStateValue(enum.Enum):
+	mixed = -1
+	off = 0
+	on = 1
+
+
+class NSEventModifierFlags(enum.IntFlag):
+	caps_lock = 1 << 16
+	shift = 1 << 17
+	control = 1 << 18
+	option = 1 << 19
+	command = 1 << 20
+	numeric_pad = 1 << 21
+	help = 1 << 22
+	function = 1 << 23
+	
+	device_independent_flags_mask = 0xffff0000
+	
+	def __str__(self) -> str:
+		if self == 0:
+			return "(no modifiers)"
+		
+		flags = self
+		modifiers = []
+		
+		for flag, name in _MODIFIER_KEY_NAMES.items():
+			if flag in flags:
+				modifiers.append(name)
+				flags &= ~flag
+		
+		if flags:
+			# Render any remaining unknown flags as plain hex.
+			modifiers.append(f"({flags:#x})")
+		
+		return "+".join(modifiers)
+
+
+_MODIFIER_KEY_NAMES = collections.OrderedDict([
+	(NSEventModifierFlags.caps_lock, "CapsLock"),
+	(NSEventModifierFlags.shift, "Shift"),
+	(NSEventModifierFlags.control, "Ctrl"),
+	(NSEventModifierFlags.option, "Alt"),
+	(NSEventModifierFlags.command, "Cmd"),
+	(NSEventModifierFlags.numeric_pad, "(NumPad)"),
+	(NSEventModifierFlags.help, "(Help)"),
+	(NSEventModifierFlags.function, "(FKey)"),
+])
+
+
+@archiving.archived_class
+class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
+	menu: typing.Any
+	is_separator: bool
+	title: str
+	key_equivalent: str
+	modifier_flags: NSEventModifierFlags
+	state: NSControlStateValue
+	on_state_image: typing.Any
+	off_state_image: typing.Any
+	mixed_state_image: typing.Any
+	action: stream.Selector
+	target: typing.Any
+	submenu: typing.Any
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version not in {505, 671}:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		self.menu = unarchiver.decode_value_of_type(b"@")
+		(
+			flags, title, key_equivalent, modifier_flags,
+			int_1, state,
+			obj_1, self.on_state_image, self.off_state_image, self.mixed_state_image,
+			self.action, int_2, obj_2,
+		) = unarchiver.decode_values_of_types(
+			b"i", foundation.NSString, foundation.NSString, b"I",
+			b"I", b"i",
+			b"@", b"@", b"@", b"@",
+			b":", b"i", b"@",
+		)
+		
+		if flags == 0:
+			self.is_separator = False
+		elif flags == 0x40000000:
+			self.is_separator = True
+		else:
+			raise ValueError(f"Unexpected value for NSMenuItem flags: 0x{flags & 0xffffffff:>08x}")
+		
+		self.title = title.value
+		self.key_equivalent = key_equivalent.value
+		self.modifier_flags = NSEventModifierFlags(modifier_flags)
+		self.state = NSControlStateValue(state)
+		
+		if int_1 != 0x7fffffff:
+			raise ValueError(f"Unknown int 1 is not 0x7fffffff: {int_1}")
+		if obj_1 is not None:
+			raise ValueError("Unknown object 1 is not nil")
+		if int_2 != 0:
+			raise ValueError(f"Unknown int 2 is not 0: {int_2}")
+		if obj_2 is not None:
+			raise ValueError("Unknown object 2 is not nil")
+		
+		self.target = unarchiver.decode_value_of_type(b"@")
+		self.submenu = unarchiver.decode_value_of_type(b"@")
+	
+	def _as_multiline_string_header_(self) -> str:
+		header = f"{type(self).__name__} {self.title!r}"
+		if self.is_separator:
+			header += " (separator)"
+		if self.key_equivalent:
+			header += f" ({self.modifier_flags!s}+{self.key_equivalent!r})"
+		return header
+	
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
+		if self.menu is None:
+			menu_desc = "None"
+		else:
+			menu_desc = f"<{_common.object_class_name(self.menu)}>"
+		yield f"in menu: {menu_desc}"
+		yield f"state: {self.state.name}"
+		
+		if self.on_state_image is not None:
+			on_state_image_it = iter(advanced_repr.as_multiline_string(self.on_state_image))
+			yield f"on state image: {next(on_state_image_it)}"
+			yield from on_state_image_it
+		if self.off_state_image is not None:
+			off_state_image_it = iter(advanced_repr.as_multiline_string(self.off_state_image))
+			yield f"off state image: {next(off_state_image_it)}"
+			yield from off_state_image_it
+		if self.mixed_state_image is not None:
+			mixed_state_image_it = iter(advanced_repr.as_multiline_string(self.mixed_state_image))
+			yield f"mixed state image: {next(mixed_state_image_it)}"
+			yield from mixed_state_image_it
+		
+		if self.action is not None:
+			yield f"action: {self.action}"
+		if self.target is not None:
+			yield f"target: <{_common.object_class_name(self.target)}>"
+		
+		if self.submenu is not None:
+			submenu_it = iter(advanced_repr.as_multiline_string(self.submenu))
+			yield f"submenu: {next(submenu_it)}"
+			yield from submenu_it
+
+
 @archiving.archived_class
 class NSCell(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	flags_unknown: typing.Tuple[int, int]
