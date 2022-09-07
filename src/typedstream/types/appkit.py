@@ -503,6 +503,20 @@ class NSButtonType(enum.Enum):
 
 
 @archiving.archived_class
+class NSButtonImageSource(foundation.NSObject):
+	resource_name: str
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 3:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		self.resource_name = unarchiver.decode_value_of_type(foundation.NSString).value
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__name__}(resource_name={self.resource_name!r})"
+
+
+@archiving.archived_class
 class NSButtonCell(NSActionCell):
 	shorts_unknown = typing.Tuple[int, int]
 	type: NSButtonType
