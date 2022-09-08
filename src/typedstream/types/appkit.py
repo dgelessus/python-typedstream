@@ -373,6 +373,72 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		return f"<{type(self).__name__}: root={self._oid_repr(self.root)}, object_parents={object_parents_repr}, object_names={object_names_repr}, unknown_set={self.unknown_set!r}, connections={connections_repr}, unknown_object={self.unknown_object!r}, object_ids={object_ids_repr}, next_object_id={self.next_object_id}, target_framework={self.target_framework!r}>"
 
 
+@archiving.archived_class
+class NSNibConnector(foundation.NSObject, advanced_repr.AsMultilineStringBase):
+	source: typing.Any
+	destination: typing.Any
+	label: str
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 17:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		self.source, self.destination, label = unarchiver.decode_values_of_types(b"@", b"@", foundation.NSString)
+		self.label = label.value
+	
+	def _as_multiline_string_header_(self) -> str:
+		return f"{type(self).__name__}, label {self.label!r}"
+	
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
+		source_it = iter(advanced_repr.as_multiline_string(self.source))
+		yield f"source: {next(source_it)}"
+		yield from source_it
+		
+		destination_it = iter(advanced_repr.as_multiline_string(self.destination))
+		yield f"destination: {next(destination_it)}"
+		yield from destination_it
+
+
+@archiving.archived_class
+class NSNibControlConnector(NSNibConnector):
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 207:
+			raise ValueError(f"Unsupported version: {class_version}")
+	
+	def _as_multiline_string_header_(self) -> str:
+		if isinstance(self.source, NSCustomObject):
+			source_name = self.source.class_name
+		else:
+			source_name = _common.object_class_name(self.source)
+		
+		if isinstance(self.destination, NSCustomObject):
+			destination_name = self.destination.class_name
+		else:
+			destination_name = _common.object_class_name(self.destination)
+		
+		return f"{type(self).__name__} <{source_name}> -> -[{destination_name} {self.label}]"
+
+
+@archiving.archived_class
+class NSNibOutletConnector(NSNibConnector):
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 207:
+			raise ValueError(f"Unsupported version: {class_version}")
+	
+	def _as_multiline_string_header_(self) -> str:
+		if isinstance(self.source, NSCustomObject):
+			source_name = self.source.class_name
+		else:
+			source_name = _common.object_class_name(self.source)
+		
+		if isinstance(self.destination, NSCustomObject):
+			destination_name = self.destination.class_name
+		else:
+			destination_name = _common.object_class_name(self.destination)
+		
+		return f"{type(self).__name__} <{source_name}>.{self.label} = <{destination_name}>"
+
+
 class NSControlStateValue(enum.Enum):
 	mixed = -1
 	off = 0
