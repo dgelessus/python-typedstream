@@ -232,6 +232,7 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	unknown_object: typing.Any
 	object_ids: "collections.OrderedDict[typing.Any, int]"
 	next_object_id: int
+	swapper_class_names: "collections.OrderedDict[typing.Any, str]"
 	target_framework: str
 	
 	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
@@ -274,9 +275,11 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		
 		self.next_object_id = unarchiver.decode_value_of_type(b"i")
 		
-		unknown_int = unarchiver.decode_value_of_type(b"i")
-		if unknown_int != 0:
-			raise ValueError(f"Unknown int field is not 0: {unknown_int}")
+		swapper_class_names_count = unarchiver.decode_value_of_type(b"i")
+		self.swapper_class_names = collections.OrderedDict()
+		for _ in range(swapper_class_names_count):
+			obj, class_name = unarchiver.decode_values_of_types(b"@", foundation.NSString)
+			self.swapper_class_names[obj] = class_name.value
 		
 		self.target_framework = unarchiver.decode_value_of_type(foundation.NSString).value
 	
@@ -365,6 +368,11 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			yield "WARNING: one or more objects not reachable from root or connections:"
 			for obj in missed_objects:
 				yield f"\t{self._object_desc(obj)}"
+		
+		if self.swapper_class_names:
+			yield f"{len(self.swapper_class_names)} swapper class names:"
+			for obj, class_name in self.swapper_class_names.items():
+				yield f"\t{self._object_desc(obj)}: {class_name!r}"
 		
 		yield f"{len(self.object_ids)} objects:"
 		for obj, oid in self.object_ids.items():
