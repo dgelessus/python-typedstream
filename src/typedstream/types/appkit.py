@@ -374,6 +374,30 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 
 
 @archiving.archived_class
+class NSIBHelpConnector(foundation.NSObject, advanced_repr.AsMultilineStringBase):
+	object: typing.Any
+	key: str
+	value: str
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 17:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		self.object, key, value = unarchiver.decode_values_of_types(b"@", foundation.NSString, foundation.NSString)
+		self.key = key.value
+		self.value = value.value
+	
+	def _as_multiline_string_header_(self) -> str:
+		return f"{type(self).__name__}, key {self.key!r}"
+	
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
+		yield f"value: {self.value!r}"
+		object_it = iter(advanced_repr.as_multiline_string(self.object))
+		yield f"object: {next(object_it)}"
+		yield from object_it
+
+
+@archiving.archived_class
 class NSNibConnector(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	source: typing.Any
 	destination: typing.Any
