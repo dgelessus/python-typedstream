@@ -722,7 +722,7 @@ class NSImageCell(NSCell):
 class NSActionCell(NSCell):
 	action: typing.Optional[stream.Selector]
 	target: typing.Any
-	control_view: "typing.Optional[NSView]"
+	control_view: typing.Any
 	
 	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 17:
@@ -734,7 +734,7 @@ class NSActionCell(NSCell):
 		
 		self.target = unarchiver.decode_value_of_type(b"@")
 		
-		self.control_view = unarchiver.decode_value_of_type(NSView)
+		self.control_view = unarchiver.decode_value_of_type(b"@")
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		yield from super()._as_multiline_string_body_()
@@ -923,7 +923,7 @@ class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		if class_version != 0:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
-		self.next_responder = unarchiver.decode_value_of_type(NSResponder)
+		self.next_responder = unarchiver.decode_value_of_type(b"@")
 	
 	def _as_multiline_string_header_(self) -> str:
 		return type(self).__name__
@@ -946,12 +946,12 @@ class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 @archiving.archived_class
 class NSView(NSResponder):
 	flags: int
-	subviews: "typing.List[NSView]"
+	subviews: typing.List[typing.Any]
 	registered_dragged_types: typing.List[str]
 	frame: foundation.NSRect
 	bounds: foundation.NSRect
-	superview: "typing.Optional[NSView]"
-	content_view: "NSView"
+	superview: typing.Any
+	content_view: typing.Any
 	
 	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
 		if class_version != 41:
@@ -969,13 +969,10 @@ class NSView(NSResponder):
 			b"f", b"f", b"f", b"f",
 		)
 		
-		self.subviews = []
-		if subviews is not None:
-			for subview in subviews.elements:
-				if not isinstance(subview, NSView):
-					raise TypeError(f"NSView subviews must be instances of NSView, not {type(subview).__name__}")
-				
-				self.subviews.append(subview)
+		if subviews is None:
+			self.subviews = []
+		else:
+			self.subviews = subviews.elements
 		
 		if obj2 is not None:
 			raise ValueError("Unknown object 2 is not nil")
@@ -993,12 +990,12 @@ class NSView(NSResponder):
 		self.frame = foundation.NSRect(foundation.NSPoint(frame_x, frame_y), foundation.NSSize(frame_width, frame_height))
 		self.bounds = foundation.NSRect(foundation.NSPoint(bounds_x, bounds_y), foundation.NSSize(bounds_width, bounds_height))
 		
-		self.superview = unarchiver.decode_value_of_type(NSView)
+		self.superview = unarchiver.decode_value_of_type(b"@")
 		
 		obj6 = unarchiver.decode_value_of_type(b"@")
 		if obj6 is not None:
 			raise ValueError("Unknown object 6 is not nil")
-		self.content_view = unarchiver.decode_value_of_type(NSView)
+		self.content_view = unarchiver.decode_value_of_type(b"@")
 		obj8 = unarchiver.decode_value_of_type(b"@")
 		if obj8 is not None:
 			raise ValueError("Unknown object 8 is not nil")
