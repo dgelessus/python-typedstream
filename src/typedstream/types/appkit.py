@@ -1054,3 +1054,28 @@ class NSView(NSResponder):
 		
 		if self.content_view is not None:
 			yield f"content view: <{_object_class_name(self.content_view)}>"
+
+
+@archiving.archived_class
+class NSControl(NSView):
+	cell: typing.Optional[NSCell]
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 41:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		int_1, int_2, int_3, self.cell = unarchiver.decode_values_of_types(b"i", b"c", b"c", NSCell)
+		
+		if int_1 != 0:
+			raise ValueError(f"Unknown int 1 is not 0: {int_1}")
+		if int_2 != 1:
+			raise ValueError(f"Unknown int 2 is not 1: {int_2}")
+		if int_3 != 0:
+			raise ValueError(f"Unknown int 3 is not 0: {int_3}")
+	
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
+		yield from super()._as_multiline_string_body_()
+		
+		cell_it = iter(advanced_repr.as_multiline_string(self.cell))
+		yield f"cell: {next(cell_it)}"
+		yield from cell_it
