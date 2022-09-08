@@ -26,6 +26,13 @@ from . import _common
 from . import foundation
 
 
+def _object_class_name(obj: typing.Any) -> str:
+	if isinstance(obj, NSCustomObject):
+		return obj.class_name
+	else:
+		return _common.object_class_name(obj)
+
+
 @archiving.archived_class
 class NSColor(foundation.NSObject):
 	class Kind(enum.Enum):
@@ -278,7 +285,7 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			return f"#{oid}"
 	
 	def _object_desc(self, obj: typing.Any) -> str:
-		desc = _common.object_class_name(obj)
+		desc = _object_class_name(obj)
 		
 		try:
 			name = self.object_names[obj]
@@ -383,7 +390,7 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		object_parents_repr = "{" + ", ".join(f"{self._oid_repr(child)}: {self._oid_repr(parent)}" for child, parent in self.object_parents.items()) + "}"
 		object_names_repr = "{" + ", ".join(f"{self._oid_repr(obj)}: {name!r}" for obj, name in self.object_names.items()) + "}"
 		connections_repr = "[" + ", ".join(f"{self._oid_repr(connection)}" for connection in self.connections) + "]"
-		object_ids_repr = "{" + ", ".join(f"<{_common.object_class_name(obj)}>: {oid}" for obj, oid in self.object_ids.items()) + "}"
+		object_ids_repr = "{" + ", ".join(f"<{_object_class_name(obj)}>: {oid}" for obj, oid in self.object_ids.items()) + "}"
 		
 		return f"<{type(self).__name__}: root={self._oid_repr(self.root)}, object_parents={object_parents_repr}, object_names={object_names_repr}, unknown_set={self.unknown_set!r}, connections={connections_repr}, unknown_object={self.unknown_object!r}, object_ids={object_ids_repr}, next_object_id={self.next_object_id}, target_framework={self.target_framework!r}>"
 
@@ -445,17 +452,7 @@ class NSNibControlConnector(NSNibConnector):
 			raise ValueError(f"Unsupported version: {class_version}")
 	
 	def _as_multiline_string_header_(self) -> str:
-		if isinstance(self.source, NSCustomObject):
-			source_name = self.source.class_name
-		else:
-			source_name = _common.object_class_name(self.source)
-		
-		if isinstance(self.destination, NSCustomObject):
-			destination_name = self.destination.class_name
-		else:
-			destination_name = _common.object_class_name(self.destination)
-		
-		return f"{type(self).__name__} <{source_name}> -> -[{destination_name} {self.label}]"
+		return f"{type(self).__name__} <{_object_class_name(self.source)}> -> -[{_object_class_name(self.destination)} {self.label}]"
 
 
 @archiving.archived_class
@@ -465,17 +462,7 @@ class NSNibOutletConnector(NSNibConnector):
 			raise ValueError(f"Unsupported version: {class_version}")
 	
 	def _as_multiline_string_header_(self) -> str:
-		if isinstance(self.source, NSCustomObject):
-			source_name = self.source.class_name
-		else:
-			source_name = _common.object_class_name(self.source)
-		
-		if isinstance(self.destination, NSCustomObject):
-			destination_name = self.destination.class_name
-		else:
-			destination_name = _common.object_class_name(self.destination)
-		
-		return f"{type(self).__name__} <{source_name}>.{self.label} = <{destination_name}>"
+		return f"{type(self).__name__} <{_object_class_name(self.source)}>.{self.label} = <{_object_class_name(self.destination)}>"
 
 
 class NSControlStateValue(enum.Enum):
@@ -583,7 +570,7 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		return header
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
-		yield f"in menu: <{_common.object_class_name(self.menu)} {self.menu.title!r}>"
+		yield f"in menu: <{_object_class_name(self.menu)} {self.menu.title!r}>"
 		
 		if self.flags != 0:
 			yield f"flags: 0x{self.flags:>08x}"
@@ -611,7 +598,7 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		if self.int_2 != 0:
 			yield f"unknown int 2: {self.int_2}"
 		if self.target is not None:
-			yield f"target: <{_common.object_class_name(self.target)}>"
+			yield f"target: <{_object_class_name(self.target)}>"
 		
 		if self.submenu is not None:
 			submenu_it = iter(advanced_repr.as_multiline_string(self.submenu))
@@ -771,12 +758,12 @@ class NSActionCell(NSCell):
 			yield f"action: {self.action!r}"
 		
 		if self.target is not None:
-			yield f"target: <{_common.object_class_name(self.target)}>"
+			yield f"target: <{_object_class_name(self.target)}>"
 		
 		if self.control_view is None:
 			control_view_desc = "None"
 		else:
-			control_view_desc = f"<{_common.object_class_name(self.control_view)}>"
+			control_view_desc = f"<{_object_class_name(self.control_view)}>"
 		yield f"control view: {control_view_desc}"
 
 
@@ -935,7 +922,7 @@ class NSComboBoxCell(NSTextFieldCell):
 				for line in advanced_repr.as_multiline_string(value):
 					yield "\t" + line
 		
-		yield f"combo box: <{_common.object_class_name(self.combo_box)}>"
+		yield f"combo box: <{_object_class_name(self.combo_box)}>"
 		
 		button_cell_it = iter(advanced_repr.as_multiline_string(self.button_cell))
 		yield f"button cell: {next(button_cell_it)}"
@@ -970,14 +957,14 @@ class NSResponder(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		if self.next_responder is None:
 			next_responder_desc = "None"
 		else:
-			next_responder_desc = f"<{_common.object_class_name(self.next_responder)}>"
+			next_responder_desc = f"<{_object_class_name(self.next_responder)}>"
 		yield f"next responder: {next_responder_desc}"
 	
 	def __repr__(self) -> str:
 		if self.next_responder is None:
 			next_responder_desc = "None"
 		else:
-			next_responder_desc = f"<{_common.object_class_name(self.next_responder)}>"
+			next_responder_desc = f"<{_object_class_name(self.next_responder)}>"
 		return f"{type(self).__name__}(next_responder={next_responder_desc})"
 
 
@@ -1063,8 +1050,8 @@ class NSView(NSResponder):
 		if self.superview is None:
 			superview_desc = "None"
 		else:
-			superview_desc = f"<{_common.object_class_name(self.superview)}>"
+			superview_desc = f"<{_object_class_name(self.superview)}>"
 		yield f"superview: {superview_desc}"
 		
 		if self.content_view is not None:
-			yield f"content view: <{_common.object_class_name(self.content_view)}>"
+			yield f"content view: <{_object_class_name(self.content_view)}>"
