@@ -793,6 +793,7 @@ class NSButtonImageSource(foundation.NSObject):
 class NSButtonCell(NSActionCell):
 	shorts_unknown = typing.Tuple[int, int]
 	type: NSButtonType
+	type_flags: int
 	flags: int
 	key_equivalent: str
 	image_1: typing.Any
@@ -814,7 +815,8 @@ class NSButtonCell(NSActionCell):
 		if self.shorts_unknown not in {(200, 25), (400, 75)}:
 			raise ValueError(f"Unexpected value for unknown shorts: {self.shorts_unknown}")
 		
-		self.type = NSButtonType(button_type)
+		self.type = NSButtonType(button_type & 0xffffff)
+		self.type_flags = button_type & 0xff000000
 		self.flags = flags & 0xffffffff
 		
 		if string_1 is not None and string_1.value:
@@ -830,6 +832,8 @@ class NSButtonCell(NSActionCell):
 		
 		yield f"unknown shorts: {self.shorts_unknown!r}"
 		yield f"button type: {self.type.name}"
+		if self.type_flags != 0:
+			yield f"button type flags: 0x{self.type_flags:>08x}"
 		yield f"button flags: 0x{self.flags:>08x}"
 		
 		if self.key_equivalent:
