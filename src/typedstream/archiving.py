@@ -415,6 +415,8 @@ def struct_class(python_class: typing.Type[_KS]) -> typing.Type[_KS]:
 def _class_name(cls: typing.Type[typing.Any]) -> str:
 	if issubclass(cls, KnownArchivedObject):
 		return cls.archived_name.decode("ascii", errors="backslashreplace")
+	elif issubclass(cls, KnownStruct) and cls.struct_name != b"?":
+		return cls.struct_name.decode("ascii", errors="backslashreplace")
 	else:
 		return cls.__name__
 
@@ -422,6 +424,8 @@ def _class_name(cls: typing.Type[typing.Any]) -> str:
 def _object_class_name(obj: typing.Any) -> str:
 	if isinstance(obj, GenericArchivedObject):
 		return obj.clazz.name.decode("ascii", errors="backslashreplace")
+	elif isinstance(obj, GenericStruct) and obj.name is not None and obj.name != b"?":
+		return obj.name.decode("ascii", errors="backslashreplace")
 	else:
 		return _class_name(type(obj))
 
