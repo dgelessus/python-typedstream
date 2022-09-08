@@ -22,7 +22,6 @@ import typing
 from .. import advanced_repr
 from .. import archiving
 from .. import stream
-from . import _common
 from . import foundation
 
 
@@ -30,7 +29,7 @@ def _object_class_name(obj: typing.Any) -> str:
 	if isinstance(obj, NSCustomObject):
 		return obj.class_name
 	else:
-		return _common.object_class_name(obj)
+		return archiving._object_class_name(obj)
 
 
 @archiving.archived_class

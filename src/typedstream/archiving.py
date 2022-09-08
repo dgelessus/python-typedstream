@@ -330,7 +330,7 @@ class KnownArchivedObject(metaclass=_KnownArchivedClass):
 		raise AssertionError("This implementation should never be called. It should have been overridden automatically by __init_subclass__.")
 	
 	def __repr__(self) -> str:
-		class_name = type(self).archived_name.decode("ascii", errors="backslashreplace")
+		class_name = _object_class_name(self)
 		if KnownArchivedObject in type(self).__bases__:
 			# This is an instance of a root class (e. g. NSObject, Object),
 			# which generally contains no interesting data of its own,
@@ -410,6 +410,20 @@ def register_struct_class(python_class: typing.Type[KnownStruct]) -> None:
 def struct_class(python_class: typing.Type[_KS]) -> typing.Type[_KS]:
 	register_struct_class(python_class)
 	return python_class
+
+
+def _class_name(cls: typing.Type[typing.Any]) -> str:
+	if issubclass(cls, KnownArchivedObject):
+		return cls.archived_name.decode("ascii", errors="backslashreplace")
+	else:
+		return cls.__name__
+
+
+def _object_class_name(obj: typing.Any) -> str:
+	if isinstance(obj, GenericArchivedObject):
+		return obj.clazz.name.decode("ascii", errors="backslashreplace")
+	else:
+		return _class_name(type(obj))
 
 
 # Placeholder for unset lookahead parameters.
@@ -712,8 +726,7 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 		
 		for enc, obj in zip(type_encodings, group.values):
 			if obj is not None and isinstance(enc, type) and not isinstance(obj, enc):
-				assert issubclass(enc, KnownArchivedObject)
-				raise TypeError(f"Expected object of class {enc.archived_name!r}, but got class {type(obj)} in stream")
+				raise TypeError(f"Expected object of class {_class_name(enc)}, but got class {_object_class_name(obj)} in stream")
 		
 		return group.values
 	
