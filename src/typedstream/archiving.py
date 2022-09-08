@@ -82,9 +82,7 @@ class TypedGroup(advanced_repr.AsMultilineStringBase):
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		for encoding, value in zip(self.encodings, self.values):
-			value_it = iter(advanced_repr.as_multiline_string(value))
-			yield f"type {encoding!r}: {next(value_it)}"
-			yield from value_it
+			yield from advanced_repr.as_multiline_string(value, prefix=f"type {encoding!r}: ")
 
 
 class TypedValue(TypedGroup):
@@ -111,9 +109,7 @@ class TypedValue(TypedGroup):
 		return f"{type(self).__module__}.{type(self).__qualname__}(encoding={self.encoding!r}, value={self.value!r})"
 	
 	def _as_multiline_string_(self) -> typing.Iterable[str]:
-		value_it = iter(advanced_repr.as_multiline_string(self.value))
-		yield f"type {self.encoding!r}: {next(value_it)}"
-		yield from value_it
+		yield from advanced_repr.as_multiline_string(self.value, prefix=f"type {self.encoding!r}: ")
 
 
 class Array(advanced_repr.AsMultilineStringBase):
@@ -202,9 +198,7 @@ class GenericArchivedObject(advanced_repr.AsMultilineStringBase):
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		if self.super_object is not None:
-			super_object_it = iter(advanced_repr.as_multiline_string(self.super_object))
-			yield f"super object: {next(super_object_it)}"
-			yield from super_object_it
+			yield from advanced_repr.as_multiline_string(self.super_object, prefix="super object: ")
 		for value in self.contents:
 			yield from advanced_repr.as_multiline_string(value)
 

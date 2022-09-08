@@ -164,10 +164,11 @@ class NSCustomObject(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		self.object = obj
 	
 	def _as_multiline_string_(self) -> typing.Iterable[str]:
-		it = iter(advanced_repr.as_multiline_string(self.object))
-		yield f"{type(self).__name__}, class {self.class_name}, object: " + next(it, "")
-		for line in it:
-			yield "\t" + line
+		yield from advanced_repr.prefix_lines(
+			advanced_repr.as_multiline_string(self.object),
+			first=f"{type(self).__name__}, class {self.class_name}, object: ",
+			rest="\t",
+		)
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}(class_name={self.class_name!r}, object={self.object!r})"
@@ -317,9 +318,10 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			cs.sort(key=lambda o: self.object_ids.get(o, 0))
 		
 		seen_in_tree: typing.Set[typing.Any] = set()
-		tree_it = iter(self._render_tree(self.root, children, seen_in_tree))
-		yield f"object tree: {next(tree_it)}"
-		yield from tree_it
+		yield from advanced_repr.prefix_lines(
+			self._render_tree(self.root, children, seen_in_tree),
+			first="object tree: ",
+		)
 		
 		missed_parents = set(children) - seen_in_tree
 		if missed_parents:
@@ -370,20 +372,15 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			else:
 				oid_desc += f" {name!r}"
 			
-			obj_it = iter(advanced_repr.as_multiline_string(obj))
-			yield f"\t{oid_desc}: {next(obj_it)}"
-			for line in obj_it:
-				yield "\t" + line
+			yield from advanced_repr.prefix_lines(
+				advanced_repr.as_multiline_string(obj),
+				first=f"\t{oid_desc}: ",
+				rest="\t",
+			)
 		
 		yield f"next object ID: #{self.next_object_id}"
-		
-		unknown_set_it = iter(advanced_repr.as_multiline_string(self.unknown_set))
-		yield f"unknown set: {next(unknown_set_it)}"
-		yield from unknown_set_it
-		
-		unknown_object_it = iter(advanced_repr.as_multiline_string(self.unknown_object))
-		yield f"unknown object: {next(unknown_object_it)}"
-		yield from unknown_object_it
+		yield from advanced_repr.as_multiline_string(self.unknown_set, prefix="unknown set: ")
+		yield from advanced_repr.as_multiline_string(self.unknown_object, prefix="unknown object: ")
 	
 	def __repr__(self) -> str:
 		object_parents_repr = "{" + ", ".join(f"{self._oid_repr(child)}: {self._oid_repr(parent)}" for child, parent in self.object_parents.items()) + "}"
@@ -413,9 +410,7 @@ class NSIBHelpConnector(foundation.NSObject, advanced_repr.AsMultilineStringBase
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		yield f"value: {self.value!r}"
-		object_it = iter(advanced_repr.as_multiline_string(self.object))
-		yield f"object: {next(object_it)}"
-		yield from object_it
+		yield from advanced_repr.as_multiline_string(self.object, prefix="object: ")
 
 
 @archiving.archived_class
@@ -435,13 +430,8 @@ class NSNibConnector(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		return f"{type(self).__name__}, label {self.label!r}"
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
-		source_it = iter(advanced_repr.as_multiline_string(self.source))
-		yield f"source: {next(source_it)}"
-		yield from source_it
-		
-		destination_it = iter(advanced_repr.as_multiline_string(self.destination))
-		yield f"destination: {next(destination_it)}"
-		yield from destination_it
+		yield from advanced_repr.as_multiline_string(self.source, prefix="source: ")
+		yield from advanced_repr.as_multiline_string(self.destination, prefix="destination: ")
 
 
 @archiving.archived_class
@@ -578,19 +568,13 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			yield f"initial state: {self.state.name}"
 		
 		if not isinstance(self.on_state_image, NSCustomResource) or self.on_state_image.class_name != "NSImage" or self.on_state_image.resource_name != "NSMenuCheckmark":
-			on_state_image_it = iter(advanced_repr.as_multiline_string(self.on_state_image))
-			yield f"on state image: {next(on_state_image_it)}"
-			yield from on_state_image_it
+			yield from advanced_repr.as_multiline_string(self.on_state_image, prefix="on state image: ")
 		
 		if self.off_state_image is not None:
-			off_state_image_it = iter(advanced_repr.as_multiline_string(self.off_state_image))
-			yield f"off state image: {next(off_state_image_it)}"
-			yield from off_state_image_it
+			yield from advanced_repr.as_multiline_string(self.off_state_image, prefix="off state image: ")
 		
 		if not isinstance(self.mixed_state_image, NSCustomResource) or self.mixed_state_image.class_name != "NSImage" or self.mixed_state_image.resource_name != "NSMenuMixedState":
-			mixed_state_image_it = iter(advanced_repr.as_multiline_string(self.mixed_state_image))
-			yield f"mixed state image: {next(mixed_state_image_it)}"
-			yield from mixed_state_image_it
+			yield from advanced_repr.as_multiline_string(self.mixed_state_image, prefix="mixed state image: ")
 		
 		if self.action is not None:
 			yield f"action: {self.action}"
@@ -600,9 +584,7 @@ class NSMenuItem(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			yield f"target: <{_object_class_name(self.target)}>"
 		
 		if self.submenu is not None:
-			submenu_it = iter(advanced_repr.as_multiline_string(self.submenu))
-			yield f"submenu: {next(submenu_it)}"
-			yield from submenu_it
+			yield from advanced_repr.as_multiline_string(self.submenu, prefix="submenu: ")
 
 
 @archiving.archived_class
@@ -839,13 +821,9 @@ class NSButtonCell(NSActionCell):
 		if self.key_equivalent:
 			yield f"key equivalent: {self.key_equivalent!r}"
 		if self.image_1 is not None:
-			image_1_it = iter(advanced_repr.as_multiline_string(self.image_1))
-			yield f"image 1: {next(image_1_it)}"
-			yield from image_1_it
+			yield from advanced_repr.as_multiline_string(self.image_1, prefix="image 1: ")
 		if self.image_2_or_font is not None:
-			image_2_it = iter(advanced_repr.as_multiline_string(self.image_2_or_font))
-			yield f"image 2 or font: {next(image_2_it)}"
-			yield from image_2_it
+			yield from advanced_repr.as_multiline_string(self.image_2_or_font, prefix="image 2 or font: ")
 
 
 @archiving.archived_class
@@ -922,14 +900,8 @@ class NSComboBoxCell(NSTextFieldCell):
 					yield "\t" + line
 		
 		yield f"combo box: <{_object_class_name(self.combo_box)}>"
-		
-		button_cell_it = iter(advanced_repr.as_multiline_string(self.button_cell))
-		yield f"button cell: {next(button_cell_it)}"
-		yield from button_cell_it
-		
-		table_view_it = iter(advanced_repr.as_multiline_string(self.table_view))
-		yield f"table view: {next(table_view_it)}"
-		yield from table_view_it
+		yield from advanced_repr.as_multiline_string(self.button_cell, prefix="button cell: ")
+		yield from advanced_repr.as_multiline_string(self.table_view, prefix="table view: ")
 
 
 @archiving.archived_class
@@ -1076,6 +1048,4 @@ class NSControl(NSView):
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		yield from super()._as_multiline_string_body_()
 		
-		cell_it = iter(advanced_repr.as_multiline_string(self.cell))
-		yield f"cell: {next(cell_it)}"
-		yield from cell_it
+		yield from advanced_repr.as_multiline_string(self.cell, prefix="cell: ")

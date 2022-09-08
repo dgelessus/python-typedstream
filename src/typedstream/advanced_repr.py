@@ -20,9 +20,31 @@ import typing
 
 
 __all__ = [
+	"prefix_lines",
 	"AsMultilineStringBase",
 	"as_multiline_string",
 ]
+
+
+def prefix_lines(
+	lines: typing.Iterable[str],
+	*,
+	first: str = "",
+	rest: str = "",
+) -> typing.Iterable[str]:
+	it = iter(lines)
+	
+	try:
+		yield first + next(it)
+	except StopIteration:
+		if first:
+			yield first
+	
+	if rest:
+		for line in it:
+			yield rest + line
+	else:
+		yield from it
 
 
 _already_rendered_ids: "contextvars.ContextVar[typing.Set[int]]" = contextvars.ContextVar("_already_rendered_ids")
@@ -115,7 +137,7 @@ class AsMultilineStringBase(object):
 		return "\n".join(self._as_multiline_string_())
 
 
-def as_multiline_string(obj: object) -> typing.Iterable[str]:
+def as_multiline_string(obj: object, *, prefix: str = "") -> typing.Iterable[str]:
 	"""Convert an object to a multiline string representation.
 	
 	If the object has an :meth:`~AsMultilineStringBase._as_multiline_string_` method,
@@ -125,6 +147,8 @@ def as_multiline_string(obj: object) -> typing.Iterable[str]:
 	and then split into an iterable of lines.
 	
 	:param obj: The object to represent.
+	:param prefix: An optional prefix to add in front of the first line of the string representation.
+		Convenience shortcut for :func:`prefix_lines`.
 	:return: The string representation as an iterable of lines (line terminators not included).
 	"""
 	
@@ -149,9 +173,11 @@ def as_multiline_string(obj: object) -> typing.Iterable[str]:
 		token2 = _currently_rendering_ids.set(currently_rendering_ids + (id(obj),))
 		
 		if isinstance(obj, AsMultilineStringBase):
-			yield from obj._as_multiline_string_()
+			res = obj._as_multiline_string_()
 		else:
-			yield from str(obj).splitlines()
+			res = str(obj).splitlines()
+		
+		yield from prefix_lines(res, first=prefix)
 	finally:
 		if already_rendered_ids is not None:
 			already_rendered_ids.add(id(obj))
