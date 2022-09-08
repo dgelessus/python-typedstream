@@ -164,11 +164,15 @@ class NSCustomObject(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		self.object = obj
 	
 	def _as_multiline_string_(self) -> typing.Iterable[str]:
-		yield from advanced_repr.prefix_lines(
-			advanced_repr.as_multiline_string(self.object),
-			first=f"{type(self).__name__}, class {self.class_name}, object: ",
-			rest="\t",
-		)
+		header = f"{type(self).__name__}, class {self.class_name}"
+		if self.object is None:
+			yield header
+		else:
+			yield from advanced_repr.prefix_lines(
+				advanced_repr.as_multiline_string(self.object),
+				first=header + ", object: ",
+				rest="\t",
+			)
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}(class_name={self.class_name!r}, object={self.object!r})"
