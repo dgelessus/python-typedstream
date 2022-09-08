@@ -331,7 +331,22 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		
 		yield f"{len(self.connections)} connections:"
 		for connection in self.connections:
-			yield f"\t{self._object_desc(connection)}"
+			line = f"\t{self._object_desc(connection)}"
+			
+			if isinstance(connection, NSIBHelpConnector):
+				line += f": {self._object_desc(connection.object)} {connection.key!r} = {connection.value!r}"
+			elif isinstance(connection, NSNibConnector):
+				source_desc = self._object_desc(connection.source)
+				destination_desc = self._object_desc(connection.destination)
+				
+				if isinstance(connection, NSNibControlConnector):
+					line += f": {source_desc} -> [{destination_desc} {connection.label}]"
+				elif isinstance(connection, NSNibOutletConnector):
+					line += f": {source_desc}.{connection.label} = {destination_desc}"
+				else:
+					line += f": {source_desc} -> {connection.label!r} -> {destination_desc}"
+			
+			yield line
 		
 		missed_objects = set(self.object_ids) - seen_in_tree - set(self.connections)
 		if missed_objects:
