@@ -728,6 +728,7 @@ class NSImageCell(NSCell):
 
 @archiving.archived_class
 class NSActionCell(NSCell):
+	tag: int
 	action: typing.Optional[stream.Selector]
 	target: typing.Any
 	control_view: typing.Any
@@ -736,9 +737,7 @@ class NSActionCell(NSCell):
 		if class_version != 17:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
-		unknown_int, self.action = unarchiver.decode_values_of_types(b"i", b":")
-		if unknown_int != 0:
-			raise ValueError(f"Unknown integer is not 0: {unknown_int}")
+		self.tag, self.action = unarchiver.decode_values_of_types(b"i", b":")
 		
 		self.target = unarchiver.decode_value_of_type(b"@")
 		
@@ -746,6 +745,9 @@ class NSActionCell(NSCell):
 	
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		yield from super()._as_multiline_string_body_()
+		
+		if self.tag != 0:
+			yield f"tag: {self.tag}"
 		
 		if self.action is not None:
 			yield f"action: {self.action!r}"
