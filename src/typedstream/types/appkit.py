@@ -591,6 +591,56 @@ class NSCell(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 		yield f"font: {self.font!r}"
 
 
+class NSImageAlignment(enum.Enum):
+	center = 0
+	top = 1
+	top_left = 2
+	top_right = 3
+	left = 4
+	bottom = 5
+	bottom_left = 6
+	bottom_right = 7
+	right = 8
+
+
+class NSImageFrameStyle(enum.Enum):
+	none = 0
+	photo = 1
+	gray_bezel = 2
+	groove = 3
+	button = 4
+
+
+class NSImageScaling(enum.Enum):
+	proportionally_down = 0
+	axes_independently = 1
+	none = 2
+	proportionally_up_or_down = 3
+
+
+@archiving.archived_class
+class NSImageCell(NSCell):
+	image_alignment: NSImageAlignment
+	image_scaling: NSImageScaling
+	image_frame_style: NSImageFrameStyle
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 41:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		image_alignment, image_scaling, image_frame_style = unarchiver.decode_values_of_types(b"i", b"i", b"i")
+		self.image_alignment = NSImageAlignment(image_alignment)
+		self.image_scaling = NSImageScaling(image_scaling)
+		self.image_frame_style = NSImageFrameStyle(image_frame_style)
+	
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
+		yield from super()._as_multiline_string_body_()
+		
+		yield f"image alignment: {self.image_alignment.name}"
+		yield f"image scaling: {self.image_scaling.name}"
+		yield f"image frame style: {self.image_frame_style.name}"
+
+
 @archiving.archived_class
 class NSActionCell(NSCell):
 	action: typing.Optional[stream.Selector]
