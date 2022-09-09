@@ -189,6 +189,12 @@ class GenericArchivedObject(advanced_repr.AsMultilineStringBase):
 		self.super_object = super_object
 		self.contents = contents
 	
+	def _allows_extra_data_(self) -> bool:
+		return True
+	
+	def _add_extra_field_(self, field: TypedGroup) -> None:
+		self.contents.append(field)
+	
 	def __repr__(self) -> str:
 		return f"{type(self).__module__}.{type(self).__qualname__}(clazz={self.clazz!r}, super_object={self.super_object!r}, contents={self.contents!r})"
 	
@@ -321,6 +327,12 @@ class KnownArchivedObject(metaclass=_KnownArchivedClass):
 		# Raise something other than NotImplementedError - this method normally doesn't need to be implemented manually by the user.
 		# (PyCharm for example warns when a subclass doesn't override a method that raises NotImplementedError.)
 		raise AssertionError("This implementation should never be called. It should have been overridden automatically by __init_subclass__.")
+	
+	def _allows_extra_data_(self) -> bool:
+		return False
+	
+	def _add_extra_field_(self, field: TypedGroup) -> None:
+		raise TypeError(f"{_object_class_name(self)} does not allow extra data at the end of the object")
 	
 	def __repr__(self) -> str:
 		class_name = _object_class_name(self)
@@ -640,12 +652,12 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 				known_obj.init_from_unarchiver(self, superclass)
 			
 			next_event = next(self.reader)
-			if isinstance(obj, GenericArchivedObject):
+			if obj._allows_extra_data_():
 				# At least part of the object is not known,
 				# so there may be extra trailing data
 				# that should be stored in the generic part of the object.
 				while not isinstance(next_event, stream.EndObject):
-					obj.contents.append(self.decode_typed_values(_lookahead=next_event))
+					obj._add_extra_field_(self.decode_typed_values(_lookahead=next_event))
 					next_event = next(self.reader)
 			else:
 				# The object's exact class is fully known,

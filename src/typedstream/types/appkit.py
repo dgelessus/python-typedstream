@@ -26,10 +26,44 @@ from . import foundation
 
 
 def _object_class_name(obj: typing.Any) -> str:
-	if isinstance(obj, NSCustomObject):
+	if isinstance(obj, (NSClassSwapper, NSCustomObject)):
 		return obj.class_name
 	else:
 		return archiving._object_class_name(obj)
+
+
+@archiving.archived_class
+class NSClassSwapper(foundation.NSObject, advanced_repr.AsMultilineStringBase):
+	class_name: str
+	template_class: archiving.Class
+	template: typing.Any
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 42:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		class_name, self.template_class = unarchiver.decode_values_of_types(foundation.NSString, b"#")
+		self.class_name = class_name.value
+		
+		self.template, superclass = archiving.instantiate_archived_class(self.template_class)
+		known_obj: typing.Optional[archiving.KnownArchivedObject]
+		if isinstance(self.template, archiving.GenericArchivedObject):
+			known_obj = self.template.super_object
+		else:
+			known_obj = self.template
+		
+		if known_obj is not None:
+			assert superclass is not None
+			known_obj.init_from_unarchiver(unarchiver, superclass)
+	
+	def _allows_extra_data_(self) -> bool:
+		return self.template._allows_extra_data_()
+	
+	def _add_extra_field_(self, field: archiving.TypedGroup) -> None:
+		self.template._add_extra_field_(field)
+	
+	def _as_multiline_string_(self) -> typing.Iterable[str]:
+		yield from advanced_repr.as_multiline_string(self.template, prefix=f"{type(self).__name__}, class name {self.class_name!r}, template: ")
 
 
 @archiving.archived_class
