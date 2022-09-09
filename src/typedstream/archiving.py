@@ -281,9 +281,6 @@ class KnownArchivedObject(metaclass=_KnownArchivedClass):
 				
 				cls._init_from_unarchiver_(self, unarchiver, archived_class.version)
 			
-			# PyCharm doesn't understand that type: ignore comments can go anywhere,
-			# unlike normal type declaration comments.
-			# noinspection PyTypeHints
 			cls.init_from_unarchiver = init_from_unarchiver # type: ignore # mypy doesn't want you to assign to methods (it's fine here, our replacement has an identical signature)
 	
 	@abc.abstractmethod
