@@ -35,6 +35,7 @@ __all__ = [
 	"archived_classes_by_name",
 	"register_archived_class",
 	"archived_class",
+	"lookup_archived_class",
 	"GenericStruct",
 	"KnownStruct",
 	"struct_classes_by_encoding",
@@ -349,6 +350,31 @@ def archived_class(python_class: typing.Type[_KAO]) -> typing.Type[_KAO]:
 	return python_class
 
 
+def lookup_archived_class(archived_class: Class) -> typing.Tuple[typing.Type[KnownArchivedObject], Class]:
+	"""Try to find the Python class corresponding to the given archived class.
+	
+	If the class cannot be found,
+	this function automatically tries to look up the superclass instead,
+	continuing recursively until a known class is encountered.
+	
+	:param archived_class: The archived class to look up.
+	:return: A tuple of the found Python class and its corresponding archived class.
+		The latter may be different from the ``archived_class`` parameter
+		if the exact class was not found,
+		but one of its superclasses was.
+	:raises LookupError: If no Python class could be found for any class in the superclass chain.
+	"""
+	
+	found_superclass: typing.Optional[Class] = archived_class
+	while found_superclass is not None:
+		try:
+			return archived_classes_by_name[found_superclass.name], found_superclass
+		except KeyError:
+			found_superclass = found_superclass.superclass
+	
+	raise LookupError(f"No Python class has been registered for any class in the superclass chain: {archived_class}")
+
+
 class GenericStruct(advanced_repr.AsMultilineStringBase):
 	"""Representation of a generic C struct value as it is stored in a typedstream.
 	
@@ -570,39 +596,36 @@ class Unarchiver(typing.ContextManager["Unarchiver"]):
 			if not isinstance(archived_class, Class):
 				raise ValueError(f"Object class must be a Class, not {type(archived_class)}")
 			
-			# Create the object.
-			# Try to look up a known custom Python class for the archived class and create an instance of it.
-			# If no custom class is known for the archived class,
-			# create a generic object instead.
+			# Try to look up a known custom Python class for the archived class
+			# (or alternatively one of its superclasses).
 			python_class: typing.Optional[typing.Type[KnownArchivedObject]]
 			superclass: typing.Optional[Class]
+			try:
+				python_class, superclass = lookup_archived_class(archived_class)
+			except LookupError:
+				python_class = None
+				superclass = None
+			
+			# Create the object.
 			known_obj: typing.Optional[KnownArchivedObject]
 			obj: typing.Union[GenericArchivedObject, KnownArchivedObject]
-			try:
-				python_class = archived_classes_by_name[archived_class.name]
-			except KeyError:
-				# If the archived class itself is not known,
-				# try to find one of its superclasses instead
+			if python_class is None:
+				# No Python class was found for any part of the superclass chain -
+				# create a generic object instead.
+				known_obj = None
+				obj = GenericArchivedObject(archived_class, known_obj, [])
+			elif superclass != archived_class:
+				# No Python class was found that matches the archived class exactly,
+				# but one of its superclasses was found -
+				# create an instance of that,
 				# so that at least part of the object can be decoded properly.
-				superclass = archived_class.superclass
-				while superclass is not None:
-					try:
-						python_class = archived_classes_by_name[superclass.name]
-					except KeyError:
-						pass
-					else:
-						break
-					superclass = superclass.superclass
-				else:
-					python_class = None
-				
-				if python_class is None:
-					known_obj = None
-				else:
-					known_obj = python_class()
+				known_obj = python_class()
+				# The fields that are not part of any known class
+				# are stored in a generic object.
 				obj = GenericArchivedObject(archived_class, known_obj, [])
 			else:
-				superclass = archived_class
+				# A Python class was found that corresponds exactly to the archived class,
+				# so create an instance of it.
 				obj = known_obj = python_class()
 			
 			# Now that the object is created,
