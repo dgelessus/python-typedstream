@@ -1048,6 +1048,7 @@ class NSView(NSResponder):
 
 @archiving.archived_class
 class NSControl(NSView):
+	int_1: int
 	bool_1: bool
 	cell: typing.Optional[NSCell]
 	
@@ -1055,10 +1056,7 @@ class NSControl(NSView):
 		if class_version != 41:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
-		int_1, bool_1, int_3, self.cell = unarchiver.decode_values_of_types(b"i", b"c", b"c", NSCell)
-		
-		if int_1 != 0:
-			raise ValueError(f"Unknown int 1 is not 0: {int_1}")
+		self.int_1, bool_1, int_3, self.cell = unarchiver.decode_values_of_types(b"i", b"c", b"c", NSCell)
 		
 		if bool_1 == 0:
 			self.bool_1 = False
@@ -1073,5 +1071,6 @@ class NSControl(NSView):
 	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
 		yield from super()._as_multiline_string_body_()
 		
+		yield f"unknown int 1: {self.int_1}"
 		yield f"unknown boolean 1: {self.bool_1}"
 		yield from advanced_repr.as_multiline_string(self.cell, prefix="cell: ")
