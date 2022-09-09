@@ -292,6 +292,9 @@ class NSIBObjectData(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 			return f"#{oid}"
 	
 	def _object_desc(self, obj: typing.Any) -> str:
+		if obj is None:
+			return "nil"
+		
 		desc = _object_class_name(obj)
 		
 		try:
