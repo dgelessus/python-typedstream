@@ -178,11 +178,7 @@ class NSValue(NSObject, advanced_repr.AsMultilineStringBase):
 		self.value = unarchiver.decode_value_of_type(self.type_encoding)
 	
 	def _as_multiline_string_(self) -> typing.Iterable[str]:
-		yield from advanced_repr.prefix_lines(
-			advanced_repr.as_multiline_string(self.value),
-			first=f"{type(self).__name__}, type {self.type_encoding!r}: ",
-			rest="\t",
-		)
+		yield from advanced_repr.as_multiline_string(self.value, prefix=f"{type(self).__name__}, type {self.type_encoding!r}: ")
 	
 	def __repr__(self) -> str:
 		return f"{type(self).__name__}(type_encoding={self.type_encoding!r}, value={self.value!r})"
