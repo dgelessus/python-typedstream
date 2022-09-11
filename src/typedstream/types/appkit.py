@@ -1038,8 +1038,8 @@ class NSView(NSResponder):
 				
 				self.registered_dragged_types.append(tp.value)
 		
-		self.frame = foundation.NSRect(foundation.NSPoint(frame_x, frame_y), foundation.NSSize(frame_width, frame_height))
-		self.bounds = foundation.NSRect(foundation.NSPoint(bounds_x, bounds_y), foundation.NSSize(bounds_width, bounds_height))
+		self.frame = foundation.NSRect.make(frame_x, frame_y, frame_width, frame_height)
+		self.bounds = foundation.NSRect.make(bounds_x, bounds_y, bounds_width, bounds_height)
 		
 		self.superview = unarchiver.decode_value_of_type(b"@")
 		

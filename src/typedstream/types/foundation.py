@@ -84,6 +84,10 @@ class NSRect(archiving.KnownStruct):
 		self.origin = origin
 		self.size = size
 	
+	@classmethod
+	def make(cls, x: float, y: float, width: float, height: float) -> "NSRect":
+		return cls(NSPoint(x, y), NSSize(width, height))
+	
 	def __str__(self) -> str:
 		return f"{{{self.origin}, {self.size}}}"
 	
