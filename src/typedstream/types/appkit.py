@@ -888,7 +888,7 @@ class NSTextFieldCell(NSActionCell):
 	text_color: NSColor
 	
 	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
-		if class_version != 62:
+		if class_version not in {61, 62}:
 			raise ValueError(f"Unsupported version: {class_version}")
 		
 		draws_background, self.background_color, self.text_color = unarchiver.decode_values_of_types(b"c", NSColor, NSColor)
