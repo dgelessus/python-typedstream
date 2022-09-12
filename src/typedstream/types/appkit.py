@@ -32,6 +32,97 @@ def _object_class_name(obj: typing.Any) -> str:
 		return archiving._object_class_name(obj)
 
 
+class NSBezierPathElement(enum.Enum):
+	move_to = 0
+	line_to = 1
+	curve_to = 2
+	close_path = 3
+
+
+class NSLineCapStyle(enum.Enum):
+	butt = 0
+	round = 1
+	square = 2
+
+
+class NSLineJoinStyle(enum.Enum):
+	miter = 0
+	round = 1
+	bevel = 2
+
+
+class NSWindingRule(enum.Enum):
+	non_zero = 0
+	even_odd = 1
+
+
+@archiving.archived_class
+class NSBezierPath(foundation.NSObject, advanced_repr.AsMultilineStringBase):
+	elements: typing.List[typing.Tuple[NSBezierPathElement, foundation.NSPoint]]
+	winding_rule: NSWindingRule
+	line_cap_style: NSLineCapStyle
+	line_join_style: NSLineJoinStyle
+	line_width: float
+	miter_limit: float
+	flatness: float
+	line_dash: typing.Optional[typing.Tuple[float, typing.List[float]]]
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 524:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		element_count = unarchiver.decode_value_of_type(b"i")
+		self.elements = []
+		for _ in range(element_count):
+			element, x, y = unarchiver.decode_values_of_types(b"c", b"f", b"f")
+			self.elements.append((NSBezierPathElement(element), foundation.NSPoint(x, y)))
+		
+		(
+			winding_rule, line_cap_style, line_join_style,
+			self.line_width, self.miter_limit, self.flatness,
+			line_dash_count,
+		) = unarchiver.decode_values_of_types(
+			b"i", b"i", b"i",
+			b"f", b"f", b"f",
+			b"i",
+		)
+		
+		self.winding_rule = NSWindingRule(winding_rule)
+		self.line_cap_style = NSLineCapStyle(line_cap_style)
+		self.line_join_style = NSLineJoinStyle(line_join_style)
+		
+		if line_dash_count > 0:
+			phase = unarchiver.decode_value_of_type(b"f")
+			pattern = []
+			for _ in range(line_dash_count):
+				pattern.append(unarchiver.decode_value_of_type(b"f"))
+			
+			self.line_dash = (phase, pattern)
+		else:
+			self.line_dash = None
+	
+	def _as_multiline_string_header_(self) -> str:
+		return type(self).__name__
+	
+	def _as_multiline_string_body_(self) -> typing.Iterable[str]:
+		yield f"winding rule: {self.winding_rule.name}"
+		yield f"line cap style: {self.line_cap_style.name}"
+		yield f"line join style: {self.line_join_style.name}"
+		yield f"line width: {self.line_width}"
+		yield f"miter limit: {self.miter_limit}"
+		yield f"flatness: {self.flatness}"
+		if self.line_dash is not None:
+			phase, pattern = self.line_dash
+			yield f"line dash: phase {phase}, pattern {pattern}"
+		
+		if self.elements:
+			yield f"{len(self.elements)} path elements:"
+			for element, point in self.elements:
+				yield f"\t{element.name} {point!s}"
+		else:
+			yield "no path elements"
+
+
 @archiving.archived_class
 class NSClassSwapper(foundation.NSObject, advanced_repr.AsMultilineStringBase):
 	class_name: str
