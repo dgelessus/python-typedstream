@@ -919,7 +919,7 @@ class NSButtonImageSource(foundation.NSObject):
 
 @archiving.archived_class
 class NSButtonCell(NSActionCell):
-	shorts_unknown = typing.Tuple[int, int]
+	shorts_unknown: typing.Tuple[int, int]
 	type: NSButtonType
 	type_flags: int
 	flags: int
