@@ -802,9 +802,17 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		"""
 		
 		# Unlike other integer types,
-		# chars are always stored literally -
+		# booleans and chars are always stored literally -
 		# the usual tags do not apply.
-		if type_encoding == b"C":
+		if type_encoding == b"B":
+			(val,) = self._read_exact(1)
+			if val == 0:
+				yield False
+			elif val == 1:
+				yield True
+			else:
+				raise InvalidTypedStreamError(f"Boolean value should be either 0 or 1, not {val}")
+		elif type_encoding == b"C":
 			yield int.from_bytes(self._read_exact(1), self.byte_order, signed=False)
 		elif type_encoding == b"c":
 			yield int.from_bytes(self._read_exact(1), self.byte_order, signed=True)
