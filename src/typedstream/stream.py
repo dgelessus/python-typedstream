@@ -169,6 +169,12 @@ class BeginTypedValues(object):
 	
 	def __str__(self) -> str:
 		return f"begin typed values (types {self.encodings!r})"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, BeginTypedValues):
+			return NotImplemented
+		
+		return self.encodings == other.encodings
 
 
 class EndTypedValues(object):
@@ -182,6 +188,12 @@ class EndTypedValues(object):
 	
 	def __str__(self) -> str:
 		return "end typed values"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, EndTypedValues):
+			return NotImplemented
+		
+		return True
 
 
 class ObjectReference(object):
@@ -208,6 +220,12 @@ class ObjectReference(object):
 	
 	def __str__(self) -> str:
 		return f"<reference to {self.referenced_type.value} #{self.number}>"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, ObjectReference):
+			return NotImplemented
+		
+		return self.referenced_type == other.referenced_type and self.number == other.number
 
 
 class Atom(object):
@@ -238,6 +256,12 @@ class Atom(object):
 	
 	def __str__(self) -> str:
 		return f"atom: {self.contents!r}"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, Atom):
+			return NotImplemented
+		
+		return self.contents == other.contents
 
 
 class Selector(object):
@@ -259,6 +283,12 @@ class Selector(object):
 	
 	def __str__(self) -> str:
 		return f"selector: {self.name!r}"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, Selector):
+			return NotImplemented
+		
+		return self.name == other.name
 
 
 class CString(object):
@@ -280,6 +310,12 @@ class CString(object):
 	
 	def __str__(self) -> str:
 		return f"C string: {self.contents!r}"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, CString):
+			return NotImplemented
+		
+		return self.contents == other.contents
 
 
 class SingleClass(object):
@@ -316,6 +352,12 @@ class SingleClass(object):
 	
 	def __str__(self) -> str:
 		return f"class {self.name.decode('ascii', errors='backslashreplace')} v{self.version}"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, SingleClass):
+			return NotImplemented
+		
+		return self.name == other.name and self.version == other.version
 
 
 class BeginObject(object):
@@ -333,6 +375,12 @@ class BeginObject(object):
 	
 	def __str__(self) -> str:
 		return "begin literal object"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, BeginObject):
+			return NotImplemented
+		
+		return True
 
 
 class EndObject(object):
@@ -343,6 +391,12 @@ class EndObject(object):
 	
 	def __str__(self) -> str:
 		return "end literal object"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, EndObject):
+			return NotImplemented
+		
+		return True
 
 
 class ByteArray(object):
@@ -367,6 +421,12 @@ class ByteArray(object):
 	
 	def __str__(self) -> str:
 		return f"byte array (element type {self.element_encoding!r}): {self.data!r}"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, ByteArray):
+			return NotImplemented
+		
+		return self.element_encoding == other.element_encoding and self.data == other.data
 
 
 class BeginArray(object):
@@ -401,6 +461,12 @@ class BeginArray(object):
 	
 	def __str__(self) -> str:
 		return f"begin array (element type {self.element_encoding!r}, length {self.length})"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, BeginArray):
+			return NotImplemented
+		
+		return self.element_encoding == other.element_encoding and self.length == other.length
 
 
 class EndArray(object):
@@ -414,6 +480,12 @@ class EndArray(object):
 	
 	def __str__(self) -> str:
 		return "end array"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, EndArray):
+			return NotImplemented
+		
+		return True
 
 
 class BeginStruct(object):
@@ -449,6 +521,12 @@ class BeginStruct(object):
 		else:
 			decoded_name = self.name.decode("ascii", errors="backslashreplace")
 		return f"begin struct {decoded_name} (field types {self.field_encodings!r})"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, BeginStruct):
+			return NotImplemented
+		
+		return self.name == other.name and self.field_encodings == other.field_encodings
 
 
 class EndStruct(object):
@@ -462,6 +540,12 @@ class EndStruct(object):
 	
 	def __str__(self) -> str:
 		return "end struct"
+	
+	def __eq__(self, other: object) -> bool:
+		if not isinstance(other, EndStruct):
+			return NotImplemented
+		
+		return True
 
 
 ReadEvent = typing.Optional[typing.Union[BeginTypedValues, EndTypedValues, int, float, ObjectReference, CString, Atom, Selector, bytes, SingleClass, BeginObject, EndObject, ByteArray, BeginArray, EndArray, BeginStruct, EndStruct]]
