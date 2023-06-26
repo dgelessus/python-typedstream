@@ -20,6 +20,7 @@ import unittest
 
 import typedstream.archiving
 import typedstream.stream
+import typedstream.types.foundation
 
 
 DATA_DIR = pathlib.Path(__file__).parent / "data"
@@ -29,9 +30,37 @@ READ_TEST_FILE_NAMES = [
 	"Empty2D macOS 13.gcx",
 ]
 
+STRING_TEST_DATA = b"\x04\x0bstreamtyped\x81\xe8\x03\x84\x01@\x84\x84\x84\x08NSString\x01\x84\x84\x08NSObject\x00\x85\x84\x01+\x0cstring value\x86"
+
 
 class TypedstreamReadTests(unittest.TestCase):
-	def test_read_stream(self) -> None:
+	def test_read_data_stream(self) -> None:
+		"""Some simple test data can be read as a low-level stream."""
+		
+		with typedstream.stream.TypedStreamReader.from_data(STRING_TEST_DATA) as ts:
+			events = list(ts)
+		
+		self.assertEqual(events, [
+			typedstream.stream.BeginTypedValues([b"@"]),
+			typedstream.stream.BeginObject(),
+			typedstream.stream.SingleClass(name=b"NSString", version=1),
+			typedstream.stream.SingleClass(name=b"NSObject", version=0),
+			None,
+			typedstream.stream.BeginTypedValues([b"+"]),
+			b"string value",
+			typedstream.stream.EndTypedValues(),
+			typedstream.stream.EndObject(),
+			typedstream.stream.EndTypedValues(),
+		])
+	
+	def test_read_data_unarchive(self) -> None:
+		"""Some simple test data can be unarchived into an object."""
+		
+		root = typedstream.unarchive_from_data(STRING_TEST_DATA)
+		self.assertEqual(type(root), typedstream.types.foundation.NSString)
+		self.assertEqual(root.value, "string value")
+	
+	def test_read_file_stream(self) -> None:
 		"""All the test files can be read as a low-level stream."""
 		
 		for name in READ_TEST_FILE_NAMES:
@@ -40,7 +69,7 @@ class TypedstreamReadTests(unittest.TestCase):
 					for _ in ts:
 						pass
 	
-	def test_read_unarchive(self) -> None:
+	def test_read_file_unarchive(self) -> None:
 		"""All the test files can be unarchived into objects."""
 		
 		for name in READ_TEST_FILE_NAMES:

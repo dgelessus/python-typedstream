@@ -91,7 +91,29 @@ try using a regular (non-editable) installation instead.
 
 ## Examples
 
-TODO
+### Simple example
+
+```python-repl
+>>> import typedstream
+>>> data = b"\x04\x0bstreamtyped\x81\xe8\x03\x84\x01@\x84\x84\x84\x08NSString\x01\x84\x84\x08NSObject\x00\x85\x84\x01+\x0cstring value\x86"
+>>> typedstream.unarchive_from_data(data)
+NSString('string value')
+>>> _.value
+'string value'
+```
+
+### Low-level stream reading
+
+```python-repl
+>>> from typedstream.stream import TypedStreamReader
+>>> ts = TypedStreamReader.from_data(data)
+>>> for event in ts:
+...     print(event)
+typedstream.stream.BeginTypedValues([b"@"])
+typedstream.stream.BeginObject()
+typedstream.stream.SingleClass(name=b'NSString', version=1)
+...
+```
 
 ### Command-line interface
 
