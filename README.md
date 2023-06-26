@@ -1,4 +1,4 @@
-# `typedstream`
+# `pytypedstream`
 
 A pure Python, cross-platform library/tool for reading Mac OS X and NeXTSTEP typedstream files.
 
@@ -59,35 +59,18 @@ and will be installed automatically as needed.
 
 ## Installation
 
-`typedstream` is compatible with Python 3.6 or later.
+`pytypedstream` is available [on PyPI](https://pypi.org/project/pytypedstream/) and can be installed using `pip`:
 
-`typedstream` is unfinished and unreleased,
-so it is not available on PyPI yet.
-If you want to use it anyway,
-you need to clone/download the source code and install it by running this `pip` command in the source directory:
+```sh
+$ python3 -m pip install pytypedstream
+```
+
+Alternatively you can download the source code manually,
+and run this command in the source code directory to install it:
 
 ```sh
 python3 -m pip install .
 ```
-
-If you update your clone or otherwise modify the code,
-you need to re-run the install command.
-You can get around the reinstall requirement by installing the package in "editable" mode:
-
-```sh
-python3 -m pip install --editable .
-```
-
-In editable mode,
-changes to the source code take effect immediately without a reinstall.
-This doesn't work perfectly in all cases though,
-especially if the package metadata
-(pyproject.toml, setup.cfg, setup.py, `__version__`, etc.)
-has changed.
-If you're using an editable install and experience any problems with the package,
-please try re-running the editable install command,
-and if that doesn't help,
-try using a regular (non-editable) installation instead.
 
 ## Examples
 
