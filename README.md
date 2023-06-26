@@ -176,6 +176,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ## Changelog
 
+### Version 0.1.1 (next version)
+
+* (no changes yet)
+
 ### Version 0.1.0
 
 * Initial version.
