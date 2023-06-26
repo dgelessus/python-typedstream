@@ -168,6 +168,29 @@ class NSMutableString(NSString):
 
 
 @archiving.archived_class
+class NSURL(NSObject):
+	relative_to: "typing.Optional[NSURL]"
+	value: str
+	
+	def _init_from_unarchiver_(self, unarchiver: archiving.Unarchiver, class_version: int) -> None:
+		if class_version != 0:
+			raise ValueError(f"Unsupported version: {class_version}")
+		
+		is_relative = unarchiver.decode_value_of_type(b"c")
+		if is_relative == 0:
+			self.relative_to = None
+		elif is_relative == 1:
+			self.relative_to = unarchiver.decode_value_of_type(NSURL)
+		else:
+			raise ValueError(f"Unexpected value for boolean: {is_relative}")
+		
+		self.value = unarchiver.decode_value_of_type(NSString).value
+	
+	def __repr__(self) -> str:
+		return f"{type(self).__name__}({self.value!r})"
+
+
+@archiving.archived_class
 class NSValue(NSObject, advanced_repr.AsMultilineStringBase):
 	detect_backreferences = False
 	

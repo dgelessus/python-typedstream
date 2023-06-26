@@ -78,5 +78,21 @@ class TypedstreamReadTests(unittest.TestCase):
 					unarchiver.decode_all()
 
 
+class FoundationUnarchiveTests(unittest.TestCase):
+	def test_unarchive_nsurl_absolute(self) -> None:
+		url = typedstream.unarchive_from_data(b"\x04\x0bstreamtyped\x81\xe8\x03\x84\x01@\x84\x84\x84\x05NSURL\x00\x84\x84\x08NSObject\x00\x85\x84\x01c\x00\x92\x84\x84\x84\x08NSString\x01\x94\x84\x01+\x1ehttps://example.com/index.html\x86\x86")
+		self.assertEqual(type(url), typedstream.types.foundation.NSURL)
+		self.assertIs(url.relative_to, None)
+		self.assertEqual(url.value, "https://example.com/index.html")
+	
+	def test_unarchive_nsurl_relative(self) -> None:
+		url = typedstream.unarchive_from_data(b"\x04\x0bstreamtyped\x81\xe8\x03\x84\x01@\x84\x84\x84\x05NSURL\x00\x84\x84\x08NSObject\x00\x85\x84\x01c\x01\x92\x84\x93\x95\x00\x92\x84\x84\x84\x08NSString\x01\x94\x84\x01+\x14https://example.com/\x86\x86\x92\x84\x97\x97\nindex.html\x86\x86")
+		self.assertEqual(type(url), typedstream.types.foundation.NSURL)
+		self.assertIsInstance(url.relative_to, typedstream.types.foundation.NSURL)
+		self.assertIs(url.relative_to.relative_to, None)
+		self.assertEqual(url.relative_to.value, "https://example.com/")
+		self.assertEqual(url.value, "index.html")
+
+
 if __name__ == "__main__":
 	unittest.main()
