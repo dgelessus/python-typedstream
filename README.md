@@ -193,6 +193,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ## Changelog
 
-### Version 0.0.1 (next version)
+### Version 0.1.0 (next version)
 
-* Initial development version.
+* Initial version.
