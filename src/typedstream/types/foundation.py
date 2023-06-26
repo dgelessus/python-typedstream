@@ -187,7 +187,10 @@ class NSURL(NSObject):
 		self.value = unarchiver.decode_value_of_type(NSString).value
 	
 	def __repr__(self) -> str:
-		return f"{type(self).__name__}({self.value!r})"
+		if self.relative_to is None:
+			return f"{type(self).__name__}({self.value!r})"
+		else:
+			return f"{type(self).__name__}(relative_to={self.relative_to!r}, value={self.value!r})"
 
 
 @archiving.archived_class
