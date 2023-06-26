@@ -44,4 +44,4 @@ from . import types # noqa: F401
 # * Add a new empty section for the next version to the README.md changelog.
 # * Commit and push the changes to main.
 
-__version__ = "0.1.0.dev"
+__version__ = "0.1.0"
