@@ -3,3 +3,4 @@
 # Please only add entries here for files that are *not* already handled by default.
 
 recursive-include tests *.py
+recursive-include tests/data *.clr *.gcx
