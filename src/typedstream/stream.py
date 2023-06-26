@@ -594,7 +594,7 @@ class TypedStreamReader(typing.ContextManager["TypedStreamReader"], typing.Itera
 		elif head == _TAG_INTEGER_4:
 			return int.from_bytes(self._read_exact(4), self.byte_order, signed=signed)
 		else:
-			raise InvalidTypedStreamError(f"Invalid head tag in this context: {head} ({head & 0xff:#x}")
+			raise InvalidTypedStreamError(f"Invalid head tag in this context: {head} ({head & 0xff:#x})")
 	
 	def _read_header(self) -> None:
 		"""Read the typedstream file header (streamer version, signature/byte order indicator, system version).
